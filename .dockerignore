@@ -1,0 +1,48 @@
+# Dependencies (will be installed fresh)
+node_modules
+
+# Build output (will be regenerated)
+dist
+
+# Database files
+*.db
+liquidity.db
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+README*
+LICENSE
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor/IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage
+*.test.js
+*.spec.js
+__tests__
+
+# Misc
+.editorconfig
+.prettierrc
+.eslintrc*

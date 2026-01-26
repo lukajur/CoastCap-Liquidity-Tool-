@@ -1,0 +1,26 @@
+# Railway/Nixpacks build configuration for optimized builds
+
+[phases.setup]
+nixPkgs = ["nodejs_18"]
+
+[phases.install]
+cmds = ["npm ci --prefer-offline --no-audit"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+# Cache node_modules between builds
+[caches]
+npm = "/root/.npm"
+node_modules = "node_modules"
+
+[start]
+cmd = "npm start"
+
+# Environment variables for build optimization
+[variables]
+NODE_ENV = "production"
+NPM_CONFIG_LOGLEVEL = "error"
+NPM_CONFIG_FUND = "false"
+NPM_CONFIG_AUDIT = "false"
+CI = "true"
