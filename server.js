@@ -45,7 +45,8 @@ if (isProduction) {
 
 // Auth middleware - protects all /api routes except /api/auth/*
 function requireAuth(req, res, next) {
-  if (req.path.startsWith('/api/auth/') || req.path === '/api/health') {
+  // When mounted at /api, req.path is relative (e.g., /auth/login not /api/auth/login)
+  if (req.path.startsWith('/auth/') || req.path === '/health') {
     return next();
   }
   if (req.session && req.session.authenticated) {
