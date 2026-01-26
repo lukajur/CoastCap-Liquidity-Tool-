@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* FullCalendar custom styles */
+.fc {
+  --fc-border-color: #e5e7eb;
+  --fc-button-bg-color: #3b82f6;
+  --fc-button-border-color: #3b82f6;
+  --fc-button-hover-bg-color: #2563eb;
+  --fc-button-hover-border-color: #2563eb;
+  --fc-button-active-bg-color: #1d4ed8;
+  --fc-button-active-border-color: #1d4ed8;
+  --fc-today-bg-color: #eff6ff;
+}
+
+.fc-event {
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 2px 4px;
+}
+
+.fc-event-to_pay {
+  background-color: #ef4444 !important;
+  border-color: #dc2626 !important;
+}
+
+.fc-event-postponed {
+  background-color: #f59e0b !important;
+  border-color: #d97706 !important;
+}
+
+.fc-event-paid {
+  background-color: #22c55e !important;
+  border-color: #16a34a !important;
+}
+
+/* Earning event styles */
+.fc-event-earning-to_pay {
+  background-color: #3b82f6 !important;
+  border-color: #2563eb !important;
+}
+
+.fc-event-earning-postponed {
+  background-color: #60a5fa !important;
+  border-color: #3b82f6 !important;
+}
+
+.fc-event-earning-paid {
+  background-color: #1d4ed8 !important;
+  border-color: #1e40af !important;
+}
