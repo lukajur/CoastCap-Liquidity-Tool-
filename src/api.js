@@ -1,4 +1,24 @@
-const API_BASE = '/api';
+// Determine API base URL based on environment
+// In production on Railway, use relative path (same origin)
+// In development with Vite proxy, use relative path
+// If VITE_API_URL is explicitly set, use that
+function getApiBase() {
+  // Check for explicitly configured API URL (for separate frontend/backend deployments)
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+
+  // In production, if we're on a Railway domain, use relative path
+  // The Express server serves both frontend and API from the same origin
+  if (import.meta.env.PROD) {
+    return '/api';
+  }
+
+  // In development, Vite proxy handles /api -> localhost:3001
+  return '/api';
+}
+
+const API_BASE = getApiBase();
 
 async function handleResponse(response) {
   if (!response.ok) {

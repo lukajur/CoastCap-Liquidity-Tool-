@@ -18,6 +18,11 @@ const AUTH_USERNAME = process.env.AUTH_USERNAME || 'admin';
 const AUTH_PASSWORD = process.env.AUTH_PASSWORD || 'changeme';
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 
+// Trust proxy in production (Railway uses a reverse proxy)
+if (isProduction) {
+  app.set('trust proxy', 1);
+}
+
 // Middleware
 app.use(cors({
   origin: isProduction ? true : 'http://localhost:5173',
@@ -34,7 +39,7 @@ app.use(session({
     secure: isProduction,
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: isProduction ? 'strict' : 'lax'
+    sameSite: 'lax' // Use lax for both environments to ensure cookies work properly
   }
 }));
 

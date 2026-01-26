@@ -11,4 +11,12 @@ export default defineConfig({
       },
     },
   },
+  // Ensure environment variables are properly exposed
+  define: {
+    // Make import.meta.env.PROD available (Vite does this by default)
+  },
+  build: {
+    // Ensure sourcemaps for debugging in production if needed
+    sourcemap: false,
+  },
 })
