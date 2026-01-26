@@ -1,4 +1,4 @@
-import { Calendar, Table, Building2, PlusCircle, Settings, TrendingUp } from 'lucide-react';
+import { Calendar, Table, Building2, PlusCircle, Settings, TrendingUp, LogOut } from 'lucide-react';
 
 const tabs = [
   { id: 'calendar', label: 'Calendar', icon: Calendar },
@@ -9,7 +9,7 @@ const tabs = [
   { id: 'categories', label: 'Categories', icon: Settings },
 ];
 
-export default function Navigation({ activeTab, onTabChange }) {
+export default function Navigation({ activeTab, onTabChange, onLogout }) {
   return (
     <nav className="bg-white shadow-sm border-b">
       <div className="max-w-7xl mx-auto px-4">
@@ -17,7 +17,7 @@ export default function Navigation({ activeTab, onTabChange }) {
           <h1 className="text-xl font-semibold text-gray-900">
             Liquidity Forecast
           </h1>
-          <div className="flex space-x-1">
+          <div className="flex items-center space-x-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               return (
@@ -35,6 +35,15 @@ export default function Navigation({ activeTab, onTabChange }) {
                 </button>
               );
             })}
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors ml-2"
+                title="Sign out"
+              >
+                <LogOut size={18} />
+              </button>
+            )}
           </div>
         </div>
       </div>

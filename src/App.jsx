@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useCompanies, useCategories, useTransactions } from './hooks/useDatabase';
+import { authApi } from './api';
 import Navigation from './components/Navigation';
 import CompanyManager from './components/CompanyManager';
 import CategoryManager from './components/CategoryManager';
@@ -8,11 +9,38 @@ import CalendarView from './components/CalendarView';
 import TableView from './components/TableView';
 import MonthlyForecast from './components/MonthlyForecast';
 import PaymentModal from './components/PaymentModal';
+import Login from './components/Login';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('calendar');
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [editingPayment, setEditingPayment] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
+
+  // Check auth status on mount
+  useEffect(() => {
+    authApi.status()
+      .then((data) => {
+        setIsAuthenticated(data.authenticated);
+      })
+      .catch(() => {
+        setIsAuthenticated(false);
+      })
+      .finally(() => {
+        setAuthChecking(false);
+      });
+  }, []);
+
+  const handleLogin = async (username, password) => {
+    await authApi.login(username, password);
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = async () => {
+    await authApi.logout();
+    setIsAuthenticated(false);
+  };
 
   const {
     companies,
@@ -20,7 +48,7 @@ export default function App() {
     addCompany,
     updateCompany,
     deleteCompany,
-  } = useCompanies();
+  } = useCompanies(isAuthenticated);
 
   const {
     categories,
@@ -28,7 +56,7 @@ export default function App() {
     addCategory,
     updateCategory,
     deleteCategory,
-  } = useCategories();
+  } = useCategories(isAuthenticated);
 
   const {
     transactions,
@@ -36,7 +64,7 @@ export default function App() {
     addTransaction,
     updateTransaction,
     deleteTransaction,
-  } = useTransactions();
+  } = useTransactions(isAuthenticated);
 
   const handleAddOrUpdatePayment = async (payment) => {
     const exists = transactions.find((p) => p.id === payment.id);
@@ -71,6 +99,23 @@ export default function App() {
     ? categories.find((c) => c.id === selectedPayment.categoryId)
     : null;
 
+  // Show loading while checking auth
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login if not authenticated
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
+
   const isLoading = companiesLoading || categoriesLoading || transactionsLoading;
 
   if (isLoading) {
@@ -86,7 +131,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <Navigation activeTab={activeTab} onTabChange={setActiveTab} />
+      <Navigation activeTab={activeTab} onTabChange={setActiveTab} onLogout={handleLogout} />
 
       <main className="max-w-7xl mx-auto px-4 py-6">
         {activeTab === 'calendar' && (

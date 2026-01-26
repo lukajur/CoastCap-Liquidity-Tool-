@@ -1,12 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { companyApi, categoryApi, transactionApi } from '../api';
 
-export function useCompanies() {
+export function useCompanies(isAuthenticated = true) {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const fetchCompanies = useCallback(async () => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
     try {
       const data = await companyApi.getAll();
       setCompanies(data);
@@ -16,7 +20,7 @@ export function useCompanies() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     fetchCompanies();
@@ -50,12 +54,16 @@ export function useCompanies() {
   };
 }
 
-export function useCategories() {
+export function useCategories(isAuthenticated = true) {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const fetchCategories = useCallback(async () => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
     try {
       const data = await categoryApi.getAll();
       setCategories(data);
@@ -65,7 +73,7 @@ export function useCategories() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     fetchCategories();
@@ -99,12 +107,16 @@ export function useCategories() {
   };
 }
 
-export function useTransactions() {
+export function useTransactions(isAuthenticated = true) {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const fetchTransactions = useCallback(async () => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
     try {
       const data = await transactionApi.getAll();
       setTransactions(data);
@@ -114,7 +126,7 @@ export function useTransactions() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     fetchTransactions();

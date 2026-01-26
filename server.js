@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import session from 'express-session';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { initializeDatabase, companyOps, categoryOps, transactionOps } from './db.js';
@@ -11,17 +13,79 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
 
+// Auth credentials from environment variables
+const AUTH_USERNAME = process.env.AUTH_USERNAME || 'admin';
+const AUTH_PASSWORD = process.env.AUTH_PASSWORD || 'changeme';
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+
 // Middleware
 app.use(cors({
-  origin: isProduction ? true : '*',
+  origin: isProduction ? true : 'http://localhost:5173',
   credentials: true
 }));
 app.use(express.json());
+
+// Session middleware
+app.use(session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: isProduction,
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: isProduction ? 'strict' : 'lax'
+  }
+}));
 
 // Serve static files in production
 if (isProduction) {
   app.use(express.static(join(__dirname, 'dist')));
 }
+
+// Auth middleware - protects all /api routes except /api/auth/*
+function requireAuth(req, res, next) {
+  if (req.path.startsWith('/api/auth/') || req.path === '/api/health') {
+    return next();
+  }
+  if (req.session && req.session.authenticated) {
+    return next();
+  }
+  return res.status(401).json({ error: 'Unauthorized' });
+}
+
+app.use('/api', requireAuth);
+
+// ===== Auth Routes =====
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body;
+
+  if (username === AUTH_USERNAME && password === AUTH_PASSWORD) {
+    req.session.authenticated = true;
+    req.session.username = username;
+    res.json({ success: true, username });
+  } else {
+    res.status(401).json({ error: 'Invalid credentials' });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ error: 'Logout failed' });
+    }
+    res.clearCookie('connect.sid');
+    res.json({ success: true });
+  });
+});
+
+app.get('/api/auth/status', (req, res) => {
+  if (req.session && req.session.authenticated) {
+    res.json({ authenticated: true, username: req.session.username });
+  } else {
+    res.json({ authenticated: false });
+  }
+});
 
 // ===== Company Routes =====
 app.get('/api/companies', (req, res) => {
@@ -161,6 +225,9 @@ async function start() {
     await initializeDatabase();
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Server running on port ${PORT} (${isProduction ? 'production' : 'development'})`);
+      if (!isProduction) {
+        console.log(`Default credentials: ${AUTH_USERNAME} / ${AUTH_PASSWORD}`);
+      }
     });
   } catch (error) {
     console.error('Failed to start server:', error);

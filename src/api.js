@@ -8,10 +8,40 @@ async function handleResponse(response) {
   return response.json();
 }
 
+// Auth API
+export const authApi = {
+  login: async (username, password) => {
+    const response = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ username, password }),
+    });
+    return handleResponse(response);
+  },
+
+  logout: async () => {
+    const response = await fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  status: async () => {
+    const response = await fetch(`${API_BASE}/auth/status`, {
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+};
+
 // Company API
 export const companyApi = {
   getAll: async () => {
-    const response = await fetch(`${API_BASE}/companies`);
+    const response = await fetch(`${API_BASE}/companies`, {
+      credentials: 'include',
+    });
     return handleResponse(response);
   },
 
@@ -19,6 +49,7 @@ export const companyApi = {
     const response = await fetch(`${API_BASE}/companies`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(company),
     });
     return handleResponse(response);
@@ -28,6 +59,7 @@ export const companyApi = {
     const response = await fetch(`${API_BASE}/companies/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(data),
     });
     return handleResponse(response);
@@ -36,6 +68,7 @@ export const companyApi = {
   delete: async (id) => {
     const response = await fetch(`${API_BASE}/companies/${id}`, {
       method: 'DELETE',
+      credentials: 'include',
     });
     return handleResponse(response);
   },
@@ -44,7 +77,9 @@ export const companyApi = {
 // Category API
 export const categoryApi = {
   getAll: async () => {
-    const response = await fetch(`${API_BASE}/categories`);
+    const response = await fetch(`${API_BASE}/categories`, {
+      credentials: 'include',
+    });
     return handleResponse(response);
   },
 
@@ -52,6 +87,7 @@ export const categoryApi = {
     const response = await fetch(`${API_BASE}/categories`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(category),
     });
     return handleResponse(response);
@@ -61,6 +97,7 @@ export const categoryApi = {
     const response = await fetch(`${API_BASE}/categories/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(data),
     });
     return handleResponse(response);
@@ -69,6 +106,7 @@ export const categoryApi = {
   delete: async (id) => {
     const response = await fetch(`${API_BASE}/categories/${id}`, {
       method: 'DELETE',
+      credentials: 'include',
     });
     return handleResponse(response);
   },
@@ -77,7 +115,9 @@ export const categoryApi = {
 // Transaction API
 export const transactionApi = {
   getAll: async () => {
-    const response = await fetch(`${API_BASE}/transactions`);
+    const response = await fetch(`${API_BASE}/transactions`, {
+      credentials: 'include',
+    });
     return handleResponse(response);
   },
 
@@ -85,6 +125,7 @@ export const transactionApi = {
     const response = await fetch(`${API_BASE}/transactions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(transaction),
     });
     return handleResponse(response);
@@ -94,6 +135,7 @@ export const transactionApi = {
     const response = await fetch(`${API_BASE}/transactions/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(data),
     });
     return handleResponse(response);
@@ -102,6 +144,7 @@ export const transactionApi = {
   delete: async (id) => {
     const response = await fetch(`${API_BASE}/transactions/${id}`, {
       method: 'DELETE',
+      credentials: 'include',
     });
     return handleResponse(response);
   },

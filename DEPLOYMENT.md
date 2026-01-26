@@ -47,12 +47,18 @@ git push -u origin main
 1. In your Railway service, go to the **"Variables"** tab
 2. Add the following variables:
 
-| Variable | Value |
-|----------|-------|
-| `NODE_ENV` | `production` |
-| `RAILWAY_VOLUME_MOUNT_PATH` | `/data` |
+| Variable | Value | Description |
+|----------|-------|-------------|
+| `NODE_ENV` | `production` | Enables production mode |
+| `RAILWAY_VOLUME_MOUNT_PATH` | `/data` | Database storage path |
+| `AUTH_USERNAME` | `your-username` | Login username |
+| `AUTH_PASSWORD` | `your-secure-password` | Login password |
+| `SESSION_SECRET` | `random-32-char-string` | Session encryption key |
 
-> Note: `PORT` is automatically set by Railway - do not set it manually.
+> **Security Notes:**
+> - `PORT` is automatically set by Railway - do not set it manually
+> - Use a strong, unique password for `AUTH_PASSWORD`
+> - Generate a random string for `SESSION_SECRET` (e.g., run `openssl rand -hex 32`)
 
 ### Step 5: Deploy
 
@@ -124,6 +130,9 @@ The app will be available at:
 | `NODE_ENV` | Yes (production) | `development` | Set to `production` for Railway |
 | `PORT` | No | `3001` | Server port (auto-set by Railway) |
 | `RAILWAY_VOLUME_MOUNT_PATH` | Yes (Railway) | - | Path to persistent volume for database |
+| `AUTH_USERNAME` | Yes | `admin` | Login username for app access |
+| `AUTH_PASSWORD` | Yes | `changeme` | Login password for app access |
+| `SESSION_SECRET` | Recommended | auto-generated | Secret key for session encryption |
 
 ## Troubleshooting
 
