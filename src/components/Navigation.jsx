@@ -1,4 +1,4 @@
-import { Calendar, Table, Building2, PlusCircle, Settings, TrendingUp, LogOut } from 'lucide-react';
+import { Calendar, Table, Building2, PlusCircle, Settings, TrendingUp, LogOut, Coins } from 'lucide-react';
 
 const tabs = [
   { id: 'calendar', label: 'Calendar', icon: Calendar },
@@ -7,6 +7,7 @@ const tabs = [
   { id: 'payments', label: 'Add Entry', icon: PlusCircle },
   { id: 'companies', label: 'Companies', icon: Building2 },
   { id: 'categories', label: 'Categories', icon: Settings },
+  { id: 'currencies', label: 'Currencies', icon: Coins },
 ];
 
 export default function Navigation({ activeTab, onTabChange, onLogout }) {

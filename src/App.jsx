@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useCompanies, useCategories, useTransactions } from './hooks/useDatabase';
+import { useCompanies, useCategories, useTransactions, useExchangeRates, useSettings, useCurrencies } from './hooks/useDatabase';
 import { authApi } from './api';
 import Navigation from './components/Navigation';
 import CompanyManager from './components/CompanyManager';
@@ -9,6 +9,7 @@ import CalendarView from './components/CalendarView';
 import TableView from './components/TableView';
 import MonthlyForecast from './components/MonthlyForecast';
 import PaymentModal from './components/PaymentModal';
+import CurrencySettings from './components/CurrencySettings';
 import Login from './components/Login';
 
 export default function App() {
@@ -66,6 +67,31 @@ export default function App() {
     deleteTransaction,
   } = useTransactions(isAuthenticated);
 
+  const {
+    exchangeRates,
+    loading: ratesLoading,
+    refreshing: ratesRefreshing,
+    refreshRates,
+    upsertRate,
+    refetch: refetchRates,
+  } = useExchangeRates(isAuthenticated);
+
+  const {
+    settings,
+    loading: settingsLoading,
+    updateSettings,
+  } = useSettings(isAuthenticated);
+
+  const {
+    currencies,
+    loading: currenciesLoading,
+    addCurrency,
+    deleteCurrency,
+    setDefaultCurrency,
+  } = useCurrencies(isAuthenticated);
+
+  const baseCurrency = settings.baseCurrency || 'EUR';
+
   const handleAddOrUpdatePayment = async (payment) => {
     const exists = transactions.find((p) => p.id === payment.id);
     if (exists) {
@@ -116,7 +142,7 @@ export default function App() {
     return <Login onLogin={handleLogin} />;
   }
 
-  const isLoading = companiesLoading || categoriesLoading || transactionsLoading;
+  const isLoading = companiesLoading || categoriesLoading || transactionsLoading || ratesLoading || settingsLoading || currenciesLoading;
 
   if (isLoading) {
     return (
@@ -139,6 +165,7 @@ export default function App() {
             transactions={transactions}
             companies={companies}
             onSelectPayment={handleSelectPayment}
+            baseCurrency={baseCurrency}
           />
         )}
 
@@ -147,19 +174,27 @@ export default function App() {
             transactions={transactions}
             companies={companies}
             categories={categories}
+            exchangeRates={exchangeRates}
+            baseCurrency={baseCurrency}
             onEdit={handleEditPayment}
             onDelete={handleDeletePayment}
           />
         )}
 
         {activeTab === 'forecast' && (
-          <MonthlyForecast transactions={transactions} />
+          <MonthlyForecast
+            transactions={transactions}
+            exchangeRates={exchangeRates}
+            baseCurrency={baseCurrency}
+            currencies={currencies}
+          />
         )}
 
         {activeTab === 'payments' && (
           <PaymentForm
             companies={companies}
             categories={categories}
+            currencies={currencies}
             onSubmit={handleAddOrUpdatePayment}
             editingPayment={editingPayment}
             onCancelEdit={() => setEditingPayment(null)}
@@ -183,6 +218,21 @@ export default function App() {
             onDelete={deleteCategory}
           />
         )}
+
+        {activeTab === 'currencies' && (
+          <CurrencySettings
+            currencies={currencies}
+            exchangeRates={exchangeRates}
+            settings={settings}
+            onAddCurrency={addCurrency}
+            onDeleteCurrency={deleteCurrency}
+            onSetDefaultCurrency={setDefaultCurrency}
+            onUpdateSettings={updateSettings}
+            onRefreshRates={refreshRates}
+            onUpsertRate={upsertRate}
+            refreshing={ratesRefreshing}
+          />
+        )}
       </main>
 
       {selectedPayment && (
@@ -193,6 +243,8 @@ export default function App() {
           onClose={() => setSelectedPayment(null)}
           onEdit={handleEditPayment}
           onDelete={handleDeletePayment}
+          exchangeRates={exchangeRates}
+          baseCurrency={baseCurrency}
         />
       )}
     </div>

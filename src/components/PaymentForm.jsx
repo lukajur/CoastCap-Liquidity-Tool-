@@ -5,6 +5,7 @@ import { generateId } from '../utils/helpers';
 const initialFormState = {
   type: 'payment',
   amount: '',
+  currency: 'EUR',
   dueDate: '',
   companyId: '',
   payee: '',
@@ -16,6 +17,7 @@ const initialFormState = {
 export default function PaymentForm({
   companies,
   categories,
+  currencies = [],
   onSubmit,
   editingPayment,
   onCancelEdit,
@@ -28,6 +30,7 @@ export default function PaymentForm({
       setForm({
         type: editingPayment.type || 'payment',
         amount: editingPayment.amount.toString(),
+        currency: editingPayment.currency || 'EUR',
         dueDate: editingPayment.dueDate,
         companyId: editingPayment.companyId,
         payee: editingPayment.payee,
@@ -66,6 +69,7 @@ export default function PaymentForm({
       id: editingPayment?.id || generateId(),
       type: form.type,
       amount: parseFloat(form.amount),
+      currency: form.currency,
       dueDate: form.dueDate,
       companyId: form.companyId,
       payee: form.payee.trim(),
@@ -135,7 +139,7 @@ export default function PaymentForm({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Amount
@@ -154,6 +158,32 @@ export default function PaymentForm({
                 {errors.amount && (
                   <p className="mt-1 text-sm text-red-600">{errors.amount}</p>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Currency
+                </label>
+                <select
+                  value={form.currency}
+                  onChange={(e) => setForm({ ...form, currency: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {currencies.length > 0 ? (
+                    currencies.map((currency) => (
+                      <option key={currency.code} value={currency.code}>
+                        {currency.code} ({currency.symbol})
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="EUR">EUR (€)</option>
+                      <option value="USD">USD ($)</option>
+                      <option value="GBP">GBP (£)</option>
+                      <option value="CHF">CHF (CHF)</option>
+                    </>
+                  )}
+                </select>
               </div>
 
               <div>

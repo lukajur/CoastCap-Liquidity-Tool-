@@ -7,12 +7,15 @@ import {
   getStatusColor,
   getStatusLabel,
   getWeekNumber,
+  convertToBaseCurrency,
 } from '../utils/helpers';
 
 export default function TableView({
   transactions,
   companies,
   categories,
+  exchangeRates = [],
+  baseCurrency = 'EUR',
   onEdit,
   onDelete,
 }) {
@@ -89,12 +92,26 @@ export default function TableView({
     const unpaidEarnings = filteredTransactions.filter(
       (p) => p.type === 'earning' && p.status !== 'paid'
     );
-    const totalPayments = unpaidPayments.reduce((sum, p) => sum + p.amount, 0);
-    const totalEarnings = unpaidEarnings.reduce((sum, p) => sum + p.amount, 0);
+
+    // Convert all amounts to base currency for accurate totals
+    const totalPayments = unpaidPayments.reduce((sum, p) => {
+      const converted = convertToBaseCurrency(p.amount, p.currency || 'EUR', baseCurrency, exchangeRates);
+      return sum + (converted !== null ? converted : p.amount);
+    }, 0);
+
+    const totalEarnings = unpaidEarnings.reduce((sum, p) => {
+      const converted = convertToBaseCurrency(p.amount, p.currency || 'EUR', baseCurrency, exchangeRates);
+      return sum + (converted !== null ? converted : p.amount);
+    }, 0);
+
     const overdue = unpaidPayments.filter((p) => getDaysUntilDue(p.dueDate) < 0);
-    const overdueAmount = overdue.reduce((sum, p) => sum + p.amount, 0);
+    const overdueAmount = overdue.reduce((sum, p) => {
+      const converted = convertToBaseCurrency(p.amount, p.currency || 'EUR', baseCurrency, exchangeRates);
+      return sum + (converted !== null ? converted : p.amount);
+    }, 0);
+
     return { totalPayments, totalEarnings, overdueAmount, overdueCount: overdue.length };
-  }, [filteredTransactions]);
+  }, [filteredTransactions, exchangeRates, baseCurrency]);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -188,31 +205,31 @@ export default function TableView({
 
         <div className="grid grid-cols-4 gap-4 mt-4">
           <div className="bg-blue-50 rounded-lg p-3">
-            <p className="text-sm text-blue-600">Expected Earnings</p>
+            <p className="text-sm text-blue-600">Expected Earnings ({baseCurrency})</p>
             <p className="text-xl font-bold text-blue-900">
-              {formatCurrency(summary.totalEarnings)}
+              {formatCurrency(summary.totalEarnings, baseCurrency)}
             </p>
           </div>
           <div className="bg-red-50 rounded-lg p-3">
-            <p className="text-sm text-red-600">Upcoming Payments</p>
+            <p className="text-sm text-red-600">Upcoming Payments ({baseCurrency})</p>
             <p className="text-xl font-bold text-red-900">
-              {formatCurrency(summary.totalPayments)}
+              {formatCurrency(summary.totalPayments, baseCurrency)}
             </p>
           </div>
           <div className="bg-green-50 rounded-lg p-3">
-            <p className="text-sm text-green-600">Net Position</p>
+            <p className="text-sm text-green-600">Net Position ({baseCurrency})</p>
             <p className={`text-xl font-bold ${
               summary.totalEarnings - summary.totalPayments >= 0
                 ? 'text-green-900'
                 : 'text-red-900'
             }`}>
-              {formatCurrency(summary.totalEarnings - summary.totalPayments)}
+              {formatCurrency(summary.totalEarnings - summary.totalPayments, baseCurrency)}
             </p>
           </div>
           <div className="bg-yellow-50 rounded-lg p-3">
             <p className="text-sm text-yellow-600">Overdue ({summary.overdueCount})</p>
             <p className="text-xl font-bold text-yellow-900">
-              {formatCurrency(summary.overdueAmount)}
+              {formatCurrency(summary.overdueAmount, baseCurrency)}
             </p>
           </div>
         </div>
@@ -300,8 +317,20 @@ export default function TableView({
                         <span className="text-sm text-gray-400">-</span>
                       )}
                     </td>
-                    <td className={`px-3 py-3 text-sm font-medium whitespace-nowrap ${getTypeColor(type)}`}>
-                      {isEarning ? '+' : '-'}{formatCurrency(transaction.amount)}
+                    <td className={`px-3 py-3 text-sm font-medium ${getTypeColor(type)}`}>
+                      <div>
+                        <span className="whitespace-nowrap">
+                          {isEarning ? '+' : '-'}{formatCurrency(transaction.amount, transaction.currency || 'EUR')}
+                        </span>
+                        {transaction.currency && transaction.currency !== baseCurrency && (
+                          <span className="block text-xs text-gray-500 whitespace-nowrap">
+                            ({formatCurrency(
+                              convertToBaseCurrency(transaction.amount, transaction.currency, baseCurrency, exchangeRates) || transaction.amount,
+                              baseCurrency
+                            )})
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-3">
                       <span

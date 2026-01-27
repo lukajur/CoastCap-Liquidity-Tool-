@@ -1,7 +1,33 @@
-import { useMemo } from 'react';
-import { formatCurrency } from '../utils/helpers';
+import { useState, useMemo } from 'react';
+import { formatCurrency, convertToBaseCurrency } from '../utils/helpers';
 
-export default function MonthlyForecast({ transactions }) {
+export default function MonthlyForecast({
+  transactions,
+  exchangeRates = [],
+  baseCurrency = 'EUR',
+  currencies = [],
+}) {
+  const [viewCurrency, setViewCurrency] = useState(baseCurrency);
+  // Helper to convert amount to view currency
+  const toViewCurrency = (amount, fromCurrency) => {
+    if (fromCurrency === viewCurrency) return amount;
+
+    // First convert to base currency if needed
+    let baseAmount = amount;
+    if (fromCurrency !== baseCurrency) {
+      const converted = convertToBaseCurrency(amount, fromCurrency, baseCurrency, exchangeRates);
+      baseAmount = converted !== null ? converted : amount;
+    }
+
+    // Then convert from base currency to view currency
+    if (viewCurrency === baseCurrency) return baseAmount;
+
+    const rate = exchangeRates.find(
+      (r) => r.fromCurrency === baseCurrency && r.toCurrency === viewCurrency
+    );
+    return rate ? baseAmount * rate.rate : baseAmount;
+  };
+
   const monthlyData = useMemo(() => {
     const now = new Date();
     const months = [];
@@ -18,17 +44,18 @@ export default function MonthlyForecast({ transactions }) {
       });
     }
 
-    // Aggregate transactions by month
+    // Aggregate transactions by month, converting to view currency
     transactions.forEach((t) => {
       const date = new Date(t.dueDate);
       const monthIndex = months.findIndex(
         (m) => m.year === date.getFullYear() && m.month === date.getMonth()
       );
       if (monthIndex !== -1) {
+        const convertedAmount = toViewCurrency(t.amount, t.currency || 'EUR');
         if (t.type === 'earning') {
-          months[monthIndex].earnings += t.amount;
+          months[monthIndex].earnings += convertedAmount;
         } else {
-          months[monthIndex].payments += t.amount;
+          months[monthIndex].payments += convertedAmount;
         }
       }
     });
@@ -44,7 +71,7 @@ export default function MonthlyForecast({ transactions }) {
         runningBalance,
       };
     });
-  }, [transactions]);
+  }, [transactions, exchangeRates, viewCurrency, baseCurrency]);
 
   const maxAmount = useMemo(() => {
     return Math.max(
@@ -65,30 +92,60 @@ export default function MonthlyForecast({ transactions }) {
 
   return (
     <div className="space-y-6">
+      {/* Currency Toggle */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Monthly Liquidity Forecast</h2>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">View in:</label>
+            <select
+              value={viewCurrency}
+              onChange={(e) => setViewCurrency(e.target.value)}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {currencies.length > 0 ? (
+                currencies.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} ({c.symbol})
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="GBP">GBP (£)</option>
+                  <option value="CHF">CHF (CHF)</option>
+                </>
+              )}
+            </select>
+          </div>
+        </div>
+      </div>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4">
         <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">Total Expected Earnings</p>
+          <p className="text-sm text-gray-500">Total Expected Earnings ({viewCurrency})</p>
           <p className="text-2xl font-bold text-blue-600">
-            {formatCurrency(totals.earnings)}
+            {formatCurrency(totals.earnings, viewCurrency)}
           </p>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">Total Expected Payments</p>
+          <p className="text-sm text-gray-500">Total Expected Payments ({viewCurrency})</p>
           <p className="text-2xl font-bold text-red-600">
-            {formatCurrency(totals.payments)}
+            {formatCurrency(totals.payments, viewCurrency)}
           </p>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">Net Cash Flow</p>
+          <p className="text-sm text-gray-500">Net Cash Flow ({viewCurrency})</p>
           <p className={`text-2xl font-bold ${totals.netFlow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {formatCurrency(totals.netFlow)}
+            {formatCurrency(totals.netFlow, viewCurrency)}
           </p>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">Final Balance</p>
+          <p className="text-sm text-gray-500">Final Balance ({viewCurrency})</p>
           <p className={`text-2xl font-bold ${monthlyData[monthlyData.length - 1]?.runningBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {formatCurrency(monthlyData[monthlyData.length - 1]?.runningBalance || 0)}
+            {formatCurrency(monthlyData[monthlyData.length - 1]?.runningBalance || 0, viewCurrency)}
           </p>
         </div>
       </div>
@@ -111,7 +168,7 @@ export default function MonthlyForecast({ transactions }) {
                   />
                   {month.earnings > 0 && (
                     <span className="absolute left-2 top-0 h-full flex items-center text-xs text-white font-medium">
-                      +{formatCurrency(month.earnings)}
+                      +{formatCurrency(month.earnings, viewCurrency)}
                     </span>
                   )}
                 </div>
@@ -123,7 +180,7 @@ export default function MonthlyForecast({ transactions }) {
                   />
                   {month.payments > 0 && (
                     <span className="absolute left-2 top-0 h-full flex items-center text-xs text-white font-medium">
-                      -{formatCurrency(month.payments)}
+                      -{formatCurrency(month.payments, viewCurrency)}
                     </span>
                   )}
                 </div>
@@ -131,7 +188,7 @@ export default function MonthlyForecast({ transactions }) {
               <div className={`w-28 text-right text-sm font-medium shrink-0 ${
                 month.netFlow >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
-                {month.netFlow >= 0 ? '+' : ''}{formatCurrency(month.netFlow)}
+                {month.netFlow >= 0 ? '+' : ''}{formatCurrency(month.netFlow, viewCurrency)}
               </div>
             </div>
           ))}
@@ -176,20 +233,20 @@ export default function MonthlyForecast({ transactions }) {
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm text-right text-blue-600 font-medium">
-                    {month.earnings > 0 ? formatCurrency(month.earnings) : '-'}
+                    {month.earnings > 0 ? formatCurrency(month.earnings, viewCurrency) : '-'}
                   </td>
                   <td className="px-4 py-3 text-sm text-right text-red-600 font-medium">
-                    {month.payments > 0 ? formatCurrency(month.payments) : '-'}
+                    {month.payments > 0 ? formatCurrency(month.payments, viewCurrency) : '-'}
                   </td>
                   <td className={`px-4 py-3 text-sm text-right font-medium ${
                     month.netFlow >= 0 ? 'text-green-600' : 'text-red-600'
                   }`}>
-                    {month.netFlow >= 0 ? '+' : ''}{formatCurrency(month.netFlow)}
+                    {month.netFlow >= 0 ? '+' : ''}{formatCurrency(month.netFlow, viewCurrency)}
                   </td>
                   <td className={`px-4 py-3 text-sm text-right font-bold ${
                     month.runningBalance >= 0 ? 'text-green-600' : 'text-red-600'
                   }`}>
-                    {formatCurrency(month.runningBalance)}
+                    {formatCurrency(month.runningBalance, viewCurrency)}
                   </td>
                 </tr>
               ))}
@@ -198,15 +255,15 @@ export default function MonthlyForecast({ transactions }) {
               <tr>
                 <td className="px-4 py-3 text-sm font-bold text-gray-900">Total (13 months)</td>
                 <td className="px-4 py-3 text-sm text-right text-blue-600 font-bold">
-                  {formatCurrency(totals.earnings)}
+                  {formatCurrency(totals.earnings, viewCurrency)}
                 </td>
                 <td className="px-4 py-3 text-sm text-right text-red-600 font-bold">
-                  {formatCurrency(totals.payments)}
+                  {formatCurrency(totals.payments, viewCurrency)}
                 </td>
                 <td className={`px-4 py-3 text-sm text-right font-bold ${
                   totals.netFlow >= 0 ? 'text-green-600' : 'text-red-600'
                 }`}>
-                  {totals.netFlow >= 0 ? '+' : ''}{formatCurrency(totals.netFlow)}
+                  {totals.netFlow >= 0 ? '+' : ''}{formatCurrency(totals.netFlow, viewCurrency)}
                 </td>
                 <td className="px-4 py-3"></td>
               </tr>

@@ -169,3 +169,117 @@ export const transactionApi = {
     return handleResponse(response);
   },
 };
+
+// Exchange Rate API
+export const exchangeRateApi = {
+  getAll: async () => {
+    const response = await fetch(`${API_BASE}/exchange-rates`, {
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  upsert: async (fromCurrency, toCurrency, rate) => {
+    const response = await fetch(`${API_BASE}/exchange-rates`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ fromCurrency, toCurrency, rate }),
+    });
+    return handleResponse(response);
+  },
+
+  bulkUpsert: async (rates) => {
+    const response = await fetch(`${API_BASE}/exchange-rates/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ rates }),
+    });
+    return handleResponse(response);
+  },
+
+  refresh: async () => {
+    const response = await fetch(`${API_BASE}/exchange-rates/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+};
+
+// Settings API
+export const settingsApi = {
+  getAll: async () => {
+    const response = await fetch(`${API_BASE}/settings`, {
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  update: async (settings) => {
+    const response = await fetch(`${API_BASE}/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(settings),
+    });
+    return handleResponse(response);
+  },
+
+  set: async (key, value) => {
+    const response = await fetch(`${API_BASE}/settings/${key}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ value }),
+    });
+    return handleResponse(response);
+  },
+};
+
+// Currency API
+export const currencyApi = {
+  getAll: async () => {
+    const response = await fetch(`${API_BASE}/currencies`, {
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  create: async (currency) => {
+    const response = await fetch(`${API_BASE}/currencies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(currency),
+    });
+    return handleResponse(response);
+  },
+
+  update: async (code, data) => {
+    const response = await fetch(`${API_BASE}/currencies/${code}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  delete: async (code) => {
+    const response = await fetch(`${API_BASE}/currencies/${code}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  setDefault: async (code) => {
+    const response = await fetch(`${API_BASE}/currencies/${code}/set-default`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+};

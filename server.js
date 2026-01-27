@@ -4,7 +4,7 @@ import session from 'express-session';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { initializeDatabase, companyOps, categoryOps, transactionOps } from './db.js';
+import { initializeDatabase, companyOps, categoryOps, transactionOps, exchangeRateOps, settingsOps, currencyOps } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -208,6 +208,178 @@ app.delete('/api/transactions/:id', (req, res) => {
     const { id } = req.params;
     transactionOps.delete(id);
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== Exchange Rate Routes =====
+app.get('/api/exchange-rates', (req, res) => {
+  try {
+    const rates = exchangeRateOps.getAll();
+    res.json(rates);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/exchange-rates', (req, res) => {
+  try {
+    const { fromCurrency, toCurrency, rate } = req.body;
+    const result = exchangeRateOps.upsert(fromCurrency, toCurrency, rate);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/exchange-rates/bulk', (req, res) => {
+  try {
+    const { rates } = req.body;
+    const result = exchangeRateOps.bulkUpsert(rates);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Fetch rates from exchangerate-api.com
+app.post('/api/exchange-rates/refresh', async (req, res) => {
+  try {
+    const settings = settingsOps.getAll();
+    const apiKey = settings.exchangeRateApiKey;
+    const baseCurrency = settings.baseCurrency || 'EUR';
+
+    if (!apiKey) {
+      return res.status(400).json({ error: 'Exchange rate API key not configured. Please add it in settings.' });
+    }
+
+    const currencies = currencyOps.getAll();
+    const currencyCodes = currencies.map(c => c.code);
+
+    // Fetch rates from exchangerate-api.com
+    const response = await fetch(`https://v6.exchangerate-api.com/v6/${apiKey}/latest/${baseCurrency}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API request failed: ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    if (data.result !== 'success') {
+      throw new Error(data['error-type'] || 'Unknown API error');
+    }
+
+    // Store rates for all currencies we track
+    const rates = [];
+    for (const code of currencyCodes) {
+      if (data.conversion_rates[code]) {
+        // Store rate from base currency to this currency
+        rates.push({
+          fromCurrency: baseCurrency,
+          toCurrency: code,
+          rate: data.conversion_rates[code]
+        });
+        // Also store inverse rate
+        if (code !== baseCurrency) {
+          rates.push({
+            fromCurrency: code,
+            toCurrency: baseCurrency,
+            rate: 1 / data.conversion_rates[code]
+          });
+        }
+      }
+    }
+
+    exchangeRateOps.bulkUpsert(rates);
+    settingsOps.set('lastRateUpdate', new Date().toISOString());
+
+    res.json({
+      success: true,
+      ratesUpdated: rates.length,
+      timestamp: new Date().toISOString(),
+      baseCurrency
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== Settings Routes =====
+app.get('/api/settings', (req, res) => {
+  try {
+    const settings = settingsOps.getAll();
+    res.json(settings);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/settings', (req, res) => {
+  try {
+    const settings = settingsOps.setMultiple(req.body);
+    res.json(settings);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/settings/:key', (req, res) => {
+  try {
+    const { key } = req.params;
+    const { value } = req.body;
+    const result = settingsOps.set(key, value);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== Currency Routes =====
+app.get('/api/currencies', (req, res) => {
+  try {
+    const currencies = currencyOps.getAll();
+    res.json(currencies);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/currencies', (req, res) => {
+  try {
+    const currency = currencyOps.create(req.body);
+    res.json(currency);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/currencies/:code', (req, res) => {
+  try {
+    const { code } = req.params;
+    const currency = currencyOps.update(code, req.body);
+    res.json(currency);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/currencies/:code', (req, res) => {
+  try {
+    const { code } = req.params;
+    currencyOps.delete(code);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/currencies/:code/set-default', (req, res) => {
+  try {
+    const { code } = req.params;
+    currencyOps.setDefault(code);
+    res.json({ success: true, baseCurrency: code });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

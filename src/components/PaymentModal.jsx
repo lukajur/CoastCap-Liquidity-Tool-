@@ -6,6 +6,7 @@ import {
   getStatusLabel,
   getDaysUntilDue,
   getWeekNumber,
+  convertToBaseCurrency,
 } from '../utils/helpers';
 
 export default function PaymentModal({
@@ -15,6 +16,8 @@ export default function PaymentModal({
   onClose,
   onEdit,
   onDelete,
+  exchangeRates = [],
+  baseCurrency = 'EUR',
 }) {
   if (!payment) return null;
 
@@ -83,8 +86,16 @@ export default function PaymentModal({
           <div>
             <label className="text-sm text-gray-500">Amount</label>
             <p className={`text-2xl font-bold ${isEarning ? 'text-blue-600' : 'text-red-600'}`}>
-              {isEarning ? '+' : '-'}{formatCurrency(payment.amount)}
+              {isEarning ? '+' : '-'}{formatCurrency(payment.amount, payment.currency || 'EUR')}
             </p>
+            {payment.currency && payment.currency !== baseCurrency && (
+              <p className="text-sm text-gray-500">
+                ({formatCurrency(
+                  convertToBaseCurrency(payment.amount, payment.currency, baseCurrency, exchangeRates) || payment.amount,
+                  baseCurrency
+                )})
+              </p>
+            )}
           </div>
 
           {payment.reference && (

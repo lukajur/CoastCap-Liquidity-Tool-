@@ -9,11 +9,38 @@ export function getWeekNumber(dateString) {
   return Math.ceil((days + startOfYear.getDay() + 1) / 7);
 }
 
-export function formatCurrency(amount) {
-  return new Intl.NumberFormat('en-US', {
+// Currency locale mapping for proper formatting
+const currencyLocales = {
+  EUR: 'de-DE',
+  USD: 'en-US',
+  GBP: 'en-GB',
+  CHF: 'de-CH',
+};
+
+export function formatCurrency(amount, currency = 'EUR') {
+  const locale = currencyLocales[currency] || 'en-US';
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'USD',
+    currency: currency,
   }).format(amount);
+}
+
+export function formatCurrencyWithEquivalent(amount, currency, baseCurrency, convertedAmount) {
+  const original = formatCurrency(amount, currency);
+  if (currency === baseCurrency || convertedAmount === null || convertedAmount === undefined) {
+    return original;
+  }
+  const equivalent = formatCurrency(convertedAmount, baseCurrency);
+  return `${original} (${equivalent})`;
+}
+
+export function convertToBaseCurrency(amount, fromCurrency, baseCurrency, exchangeRates) {
+  if (fromCurrency === baseCurrency) return amount;
+  const rate = exchangeRates.find(
+    (r) => r.fromCurrency === fromCurrency && r.toCurrency === baseCurrency
+  );
+  if (!rate) return null;
+  return amount * rate.rate;
 }
 
 export function formatDate(dateString) {

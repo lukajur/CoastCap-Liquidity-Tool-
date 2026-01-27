@@ -8,6 +8,7 @@ export default function CalendarView({
   transactions,
   companies,
   onSelectPayment,
+  baseCurrency = 'EUR',
 }) {
   const [filterCompanyId, setFilterCompanyId] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -27,10 +28,11 @@ export default function CalendarView({
       const company = companies.find((c) => c.id === transaction.companyId);
       const isEarning = transaction.type === 'earning';
       const prefix = isEarning ? '+' : '-';
+      const currency = transaction.currency || 'EUR';
 
       return {
         id: transaction.id,
-        title: `${prefix} ${transaction.payee} - ${formatCurrency(transaction.amount)}`,
+        title: `${prefix} ${transaction.payee} - ${formatCurrency(transaction.amount, currency)}`,
         date: transaction.dueDate,
         className: isEarning
           ? `fc-event-earning-${transaction.status}`
