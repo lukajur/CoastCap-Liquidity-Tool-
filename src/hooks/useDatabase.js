@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { companyApi, categoryApi, transactionApi, exchangeRateApi, settingsApi, currencyApi } from '../api';
+import { companyApi, categoryApi, transactionApi, exchangeRateApi, settingsApi, currencyApi, recurringTemplateApi } from '../api';
 
 export function useCompanies(isAuthenticated = true) {
   const [companies, setCompanies] = useState([]);
@@ -339,5 +339,90 @@ export function useCurrencies(isAuthenticated = true) {
     deleteCurrency,
     setDefaultCurrency,
     refetch: fetchCurrencies,
+  };
+}
+
+export function useRecurringTemplates(isAuthenticated = true) {
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchTemplates = useCallback(async () => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const data = await recurringTemplateApi.getAll();
+      setTemplates(data);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    fetchTemplates();
+  }, [fetchTemplates]);
+
+  const addTemplate = async (template) => {
+    const result = await recurringTemplateApi.create(template);
+    setTemplates((prev) => [...prev, result.template]);
+    return result;
+  };
+
+  const updateTemplate = async (id, data, updateFutureInstances = false) => {
+    const result = await recurringTemplateApi.update(id, { ...data, updateFutureInstances });
+    setTemplates((prev) => prev.map((t) => (t.id === id ? { ...t, ...data } : t)));
+    return result;
+  };
+
+  const deleteTemplate = async (id) => {
+    await recurringTemplateApi.delete(id);
+    setTemplates((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const pauseTemplate = async (id) => {
+    await recurringTemplateApi.pause(id);
+    setTemplates((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, status: 'paused' } : t))
+    );
+  };
+
+  const resumeTemplate = async (id) => {
+    await recurringTemplateApi.resume(id);
+    setTemplates((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, status: 'active' } : t))
+    );
+  };
+
+  const skipOccurrence = async (templateId, transactionId) => {
+    await recurringTemplateApi.skip(templateId, transactionId);
+  };
+
+  const generateOccurrences = async () => {
+    const result = await recurringTemplateApi.generate();
+    return result;
+  };
+
+  const getTemplateTransactions = async (id) => {
+    return await recurringTemplateApi.getTransactions(id);
+  };
+
+  return {
+    templates,
+    loading,
+    error,
+    addTemplate,
+    updateTemplate,
+    deleteTemplate,
+    pauseTemplate,
+    resumeTemplate,
+    skipOccurrence,
+    generateOccurrences,
+    getTemplateTransactions,
+    refetch: fetchTemplates,
   };
 }

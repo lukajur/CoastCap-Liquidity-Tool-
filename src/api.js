@@ -283,3 +283,87 @@ export const currencyApi = {
     return handleResponse(response);
   },
 };
+
+// Recurring Template API
+export const recurringTemplateApi = {
+  getAll: async () => {
+    const response = await fetch(`${API_BASE}/recurring-templates`, {
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  getById: async (id) => {
+    const response = await fetch(`${API_BASE}/recurring-templates/${id}`, {
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  create: async (template) => {
+    const response = await fetch(`${API_BASE}/recurring-templates`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(template),
+    });
+    return handleResponse(response);
+  },
+
+  update: async (id, data) => {
+    const response = await fetch(`${API_BASE}/recurring-templates/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  delete: async (id) => {
+    const response = await fetch(`${API_BASE}/recurring-templates/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  pause: async (id) => {
+    const response = await fetch(`${API_BASE}/recurring-templates/${id}/pause`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  resume: async (id) => {
+    const response = await fetch(`${API_BASE}/recurring-templates/${id}/resume`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  skip: async (templateId, transactionId) => {
+    const response = await fetch(`${API_BASE}/recurring-templates/${templateId}/skip/${transactionId}`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  generate: async () => {
+    const response = await fetch(`${API_BASE}/recurring-templates/generate`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  getTransactions: async (id) => {
+    const response = await fetch(`${API_BASE}/recurring-templates/${id}/transactions`, {
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+};

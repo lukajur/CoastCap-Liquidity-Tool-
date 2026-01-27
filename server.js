@@ -4,7 +4,7 @@ import session from 'express-session';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { initializeDatabase, companyOps, categoryOps, transactionOps, exchangeRateOps, settingsOps, currencyOps } from './db.js';
+import { initializeDatabase, companyOps, categoryOps, transactionOps, exchangeRateOps, settingsOps, currencyOps, recurringTemplateOps } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -385,6 +385,278 @@ app.post('/api/currencies/:code/set-default', (req, res) => {
   }
 });
 
+// ===== Recurring Template Routes =====
+
+// Helper function to generate occurrences
+function generateOccurrences(template) {
+  const occurrences = [];
+  let currentDate = new Date(template.startDate);
+  const endDate = template.endDate ? new Date(template.endDate) : null;
+  const maxDate = new Date();
+  maxDate.setMonth(maxDate.getMonth() + 12);
+
+  let count = 0;
+  const maxCount = template.occurrencesCount || Infinity;
+
+  // Get existing transactions for this template to check counts
+  const existingTransactions = transactionOps.getByTemplateId(template.id);
+  const existingDates = new Set(existingTransactions.map(t => t.occurrenceDate || t.dueDate));
+
+  while (currentDate <= maxDate) {
+    if (endDate && currentDate > endDate) break;
+
+    // Count includes existing paid transactions
+    const totalOccurrences = existingTransactions.length + occurrences.length;
+    if (totalOccurrences >= maxCount) break;
+
+    const dateStr = currentDate.toISOString().split('T')[0];
+
+    // Only generate if not already exists
+    if (!existingDates.has(dateStr)) {
+      const id = Date.now().toString(36) + Math.random().toString(36).substr(2) + occurrences.length;
+      occurrences.push({
+        id,
+        type: template.type || 'payment',
+        amount: template.amount,
+        currency: template.currency || 'EUR',
+        dueDate: dateStr,
+        companyId: template.companyId,
+        payee: template.payee,
+        reference: template.reference,
+        categoryId: template.categoryId,
+        status: 'to_pay',
+        recurringTemplateId: template.id,
+        isRecurring: true,
+        isException: false,
+        occurrenceDate: dateStr
+      });
+    }
+
+    currentDate = getNextOccurrenceDate(currentDate, template.frequency);
+    count++;
+
+    // Safety limit
+    if (count > 1000) break;
+  }
+
+  return occurrences;
+}
+
+// Helper to get next occurrence date
+function getNextOccurrenceDate(date, frequency) {
+  const next = new Date(date);
+  const originalDay = date.getDate();
+
+  switch (frequency) {
+    case 'weekly':
+      next.setDate(next.getDate() + 7);
+      break;
+    case 'monthly':
+      next.setMonth(next.getMonth() + 1);
+      // Handle end of month edge case
+      handleEndOfMonth(next, originalDay);
+      break;
+    case 'quarterly':
+      next.setMonth(next.getMonth() + 3);
+      handleEndOfMonth(next, originalDay);
+      break;
+    case 'yearly':
+      next.setFullYear(next.getFullYear() + 1);
+      handleEndOfMonth(next, originalDay);
+      break;
+    default:
+      next.setMonth(next.getMonth() + 1);
+      handleEndOfMonth(next, originalDay);
+  }
+
+  return next;
+}
+
+// Helper for end of month handling
+function handleEndOfMonth(date, originalDay) {
+  const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  if (originalDay > lastDayOfMonth) {
+    date.setDate(lastDayOfMonth);
+  } else {
+    date.setDate(originalDay);
+  }
+}
+
+app.get('/api/recurring-templates', (req, res) => {
+  try {
+    const templates = recurringTemplateOps.getAll();
+    res.json(templates);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/recurring-templates/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const template = recurringTemplateOps.getById(id);
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+    res.json(template);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/recurring-templates', (req, res) => {
+  try {
+    const template = recurringTemplateOps.create(req.body);
+
+    // Generate initial occurrences
+    const occurrences = generateOccurrences(template);
+    for (const occurrence of occurrences) {
+      transactionOps.create(occurrence);
+    }
+
+    // Update last generated date
+    if (occurrences.length > 0) {
+      const lastDate = occurrences[occurrences.length - 1].dueDate;
+      recurringTemplateOps.updateLastGenerated(template.id, lastDate);
+    }
+
+    res.json({ template, generatedCount: occurrences.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/recurring-templates/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { updateFutureInstances } = req.body;
+
+    const template = recurringTemplateOps.update(id, req.body);
+
+    let regeneratedCount = 0;
+    if (updateFutureInstances) {
+      // Delete unpaid future instances and regenerate
+      const today = new Date().toISOString().split('T')[0];
+      transactionOps.deleteFutureByTemplateId(id, today);
+
+      const updatedTemplate = recurringTemplateOps.getById(id);
+      const occurrences = generateOccurrences(updatedTemplate);
+      for (const occurrence of occurrences) {
+        transactionOps.create(occurrence);
+      }
+      regeneratedCount = occurrences.length;
+
+      if (occurrences.length > 0) {
+        const lastDate = occurrences[occurrences.length - 1].dueDate;
+        recurringTemplateOps.updateLastGenerated(id, lastDate);
+      }
+    }
+
+    res.json({ template, regeneratedCount });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/recurring-templates/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Delete all unpaid instances
+    transactionOps.deleteUnpaidByTemplateId(id);
+
+    // Delete the template
+    recurringTemplateOps.delete(id);
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/recurring-templates/:id/pause', (req, res) => {
+  try {
+    const { id } = req.params;
+    recurringTemplateOps.pause(id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/recurring-templates/:id/resume', (req, res) => {
+  try {
+    const { id } = req.params;
+    recurringTemplateOps.resume(id);
+
+    // Generate new occurrences
+    const template = recurringTemplateOps.getById(id);
+    const occurrences = generateOccurrences(template);
+    for (const occurrence of occurrences) {
+      transactionOps.create(occurrence);
+    }
+
+    if (occurrences.length > 0) {
+      const lastDate = occurrences[occurrences.length - 1].dueDate;
+      recurringTemplateOps.updateLastGenerated(id, lastDate);
+    }
+
+    res.json({ success: true, generatedCount: occurrences.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/recurring-templates/:id/skip/:transactionId', (req, res) => {
+  try {
+    const { transactionId } = req.params;
+
+    // Mark the transaction as skipped
+    const transaction = transactionOps.getAll().find(t => t.id === transactionId);
+    if (transaction) {
+      transactionOps.update({ ...transaction, status: 'skipped' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/recurring-templates/generate', (req, res) => {
+  try {
+    const templates = recurringTemplateOps.getAll().filter(t => t.status === 'active');
+    let totalGenerated = 0;
+
+    for (const template of templates) {
+      const occurrences = generateOccurrences(template);
+      for (const occurrence of occurrences) {
+        transactionOps.create(occurrence);
+      }
+
+      if (occurrences.length > 0) {
+        const lastDate = occurrences[occurrences.length - 1].dueDate;
+        recurringTemplateOps.updateLastGenerated(template.id, lastDate);
+        totalGenerated += occurrences.length;
+      }
+    }
+
+    res.json({ success: true, generatedCount: totalGenerated });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/recurring-templates/:id/transactions', (req, res) => {
+  try {
+    const { id } = req.params;
+    const transactions = transactionOps.getByTemplateId(id);
+    res.json(transactions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -397,10 +669,41 @@ if (isProduction) {
   });
 }
 
+// Auto-generate recurring instances for active templates
+function autoGenerateRecurringInstances() {
+  try {
+    const templates = recurringTemplateOps.getAll().filter(t => t.status === 'active');
+    let totalGenerated = 0;
+
+    for (const template of templates) {
+      const occurrences = generateOccurrences(template);
+      for (const occurrence of occurrences) {
+        transactionOps.create(occurrence);
+      }
+
+      if (occurrences.length > 0) {
+        const lastDate = occurrences[occurrences.length - 1].dueDate;
+        recurringTemplateOps.updateLastGenerated(template.id, lastDate);
+        totalGenerated += occurrences.length;
+      }
+    }
+
+    if (totalGenerated > 0) {
+      console.log(`Auto-generated ${totalGenerated} recurring transaction instances`);
+    }
+  } catch (error) {
+    console.error('Error auto-generating recurring instances:', error);
+  }
+}
+
 // Initialize database and start server
 async function start() {
   try {
     await initializeDatabase();
+
+    // Auto-generate recurring instances on startup
+    autoGenerateRecurringInstances();
+
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Server running on port ${PORT} (${isProduction ? 'production' : 'development'})`);
       if (!isProduction) {

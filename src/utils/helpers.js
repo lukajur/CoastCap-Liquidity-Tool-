@@ -82,7 +82,110 @@ export function getStatusLabel(status) {
       return 'Postponed';
     case 'paid':
       return 'Paid';
+    case 'skipped':
+      return 'Skipped';
     default:
       return status;
   }
+}
+
+// Recurring payment helpers
+export function getFrequencyLabel(frequency) {
+  switch (frequency) {
+    case 'weekly':
+      return 'Weekly';
+    case 'monthly':
+      return 'Monthly';
+    case 'quarterly':
+      return 'Quarterly';
+    case 'yearly':
+      return 'Yearly';
+    default:
+      return frequency;
+  }
+}
+
+export function getNextOccurrenceDate(currentDate, frequency) {
+  const next = new Date(currentDate);
+  const originalDay = new Date(currentDate).getDate();
+
+  switch (frequency) {
+    case 'weekly':
+      next.setDate(next.getDate() + 7);
+      break;
+    case 'monthly':
+      next.setMonth(next.getMonth() + 1);
+      handleEndOfMonth(next, originalDay);
+      break;
+    case 'quarterly':
+      next.setMonth(next.getMonth() + 3);
+      handleEndOfMonth(next, originalDay);
+      break;
+    case 'yearly':
+      next.setFullYear(next.getFullYear() + 1);
+      handleEndOfMonth(next, originalDay);
+      break;
+    default:
+      next.setMonth(next.getMonth() + 1);
+      handleEndOfMonth(next, originalDay);
+  }
+
+  return next;
+}
+
+function handleEndOfMonth(date, originalDay) {
+  const lastDayOfMonth = getLastDayOfMonth(date.getFullYear(), date.getMonth());
+  if (originalDay > lastDayOfMonth) {
+    date.setDate(lastDayOfMonth);
+  } else {
+    date.setDate(originalDay);
+  }
+}
+
+export function getLastDayOfMonth(year, month) {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+export function generateOccurrences(template, untilDate) {
+  const occurrences = [];
+  let currentDate = new Date(template.startDate);
+  const endDate = template.endDate ? new Date(template.endDate) : null;
+  const maxDate = untilDate ? new Date(untilDate) : new Date();
+
+  if (!untilDate) {
+    maxDate.setMonth(maxDate.getMonth() + 12);
+  }
+
+  let count = 0;
+  const maxCount = template.occurrencesCount || Infinity;
+
+  while (currentDate <= maxDate && count < maxCount) {
+    if (endDate && currentDate > endDate) break;
+
+    occurrences.push({
+      ...template,
+      dueDate: currentDate.toISOString().split('T')[0],
+      recurringTemplateId: template.id,
+      isRecurring: true
+    });
+
+    currentDate = getNextOccurrenceDate(currentDate, template.frequency);
+    count++;
+
+    if (count > 1000) break;
+  }
+
+  return occurrences;
+}
+
+export function getRecurringDescription(template, transactionCount) {
+  const freq = getFrequencyLabel(template?.frequency || 'monthly');
+  if (template?.occurrencesCount) {
+    const remaining = template.occurrencesCount - (transactionCount || 0);
+    return `${freq} (${remaining} remaining)`;
+  }
+  if (template?.endDate) {
+    return `${freq} (until ${formatDate(template.endDate)})`;
+  }
+  return `${freq} (Ongoing)`;
 }

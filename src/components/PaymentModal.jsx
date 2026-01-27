@@ -1,4 +1,4 @@
-import { X, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
+import { X, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle, RefreshCw } from 'lucide-react';
 import {
   formatCurrency,
   formatDate,
@@ -7,15 +7,18 @@ import {
   getDaysUntilDue,
   getWeekNumber,
   convertToBaseCurrency,
+  getFrequencyLabel,
 } from '../utils/helpers';
 
 export default function PaymentModal({
   payment,
   company,
   category,
+  template,
   onClose,
   onEdit,
   onDelete,
+  onSkip,
   exchangeRates = [],
   baseCurrency = 'EUR',
 }) {
@@ -24,8 +27,14 @@ export default function PaymentModal({
   const daysUntilDue = getDaysUntilDue(payment.dueDate);
   const weekNumber = getWeekNumber(payment.dueDate);
   const isEarning = payment.type === 'earning';
+  const isRecurring = payment.isRecurring;
+  const isPaid = payment.status === 'paid';
+  const isSkipped = payment.status === 'skipped';
 
   const getStatusColorForType = (status, type) => {
+    if (status === 'skipped') {
+      return 'bg-gray-200 text-gray-600';
+    }
     if (type === 'earning') {
       switch (status) {
         case 'to_pay':
@@ -42,6 +51,9 @@ export default function PaymentModal({
   };
 
   const getStatusLabelForType = (status, type) => {
+    if (status === 'skipped') {
+      return 'Skipped';
+    }
     if (type === 'earning') {
       switch (status) {
         case 'to_pay':
@@ -66,6 +78,17 @@ export default function PaymentModal({
             <h3 className="text-lg font-semibold text-gray-900">
               {isEarning ? 'Earning Details' : 'Payment Details'}
             </h3>
+            {isRecurring && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                <RefreshCw size={10} />
+                Recurring
+              </span>
+            )}
+            {payment.isException && (
+              <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
+                Modified
+              </span>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -76,6 +99,35 @@ export default function PaymentModal({
         </div>
 
         <div className="p-4 space-y-4">
+          {/* Recurring Series Info */}
+          {isRecurring && template && (
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-center gap-2 mb-1">
+                <RefreshCw size={14} className="text-blue-600" />
+                <span className="text-sm font-medium text-blue-900">
+                  Part of recurring series
+                </span>
+              </div>
+              <p className="text-sm text-blue-700">
+                {template.payee} - {getFrequencyLabel(template.frequency)}
+                {template.occurrencesCount && (
+                  <span className="ml-1">({template.occurrencesCount} occurrences)</span>
+                )}
+                {template.endDate && (
+                  <span className="ml-1">(until {formatDate(template.endDate)})</span>
+                )}
+                {!template.occurrencesCount && !template.endDate && (
+                  <span className="ml-1">(Ongoing)</span>
+                )}
+              </p>
+              {template.status === 'paused' && (
+                <span className="inline-block mt-2 px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                  Series Paused
+                </span>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="text-sm text-gray-500">
               {isEarning ? 'Payer' : 'Payee'}
@@ -161,23 +213,46 @@ export default function PaymentModal({
               </span>
             </div>
           </div>
+
+          {isPaid && (
+            <div className="p-3 bg-green-50 rounded-lg border border-green-200 text-sm text-green-800">
+              This {isEarning ? 'earning has been received' : 'payment has been paid'}.
+            </div>
+          )}
         </div>
 
-        <div className="flex gap-2 p-4 border-t bg-gray-50 rounded-b-lg">
-          <button
-            onClick={() => onEdit(payment)}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Pencil size={16} />
-            Edit
-          </button>
-          <button
-            onClick={() => onDelete(payment.id)}
-            className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-          >
-            <Trash2 size={16} />
-            Delete
-          </button>
+        <div className="flex justify-between gap-2 p-4 border-t bg-gray-50 rounded-b-lg">
+          <div>
+            {!isPaid && !isSkipped && isRecurring && onSkip && (
+              <button
+                onClick={() => {
+                  onSkip(payment.recurringTemplateId, payment.id);
+                  onClose();
+                }}
+                className="text-sm text-gray-600 hover:text-gray-800 underline"
+              >
+                Skip this occurrence
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {!isPaid && (
+              <button
+                onClick={() => onEdit(payment)}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Pencil size={16} />
+                Edit
+              </button>
+            )}
+            <button
+              onClick={() => onDelete(payment.id)}
+              className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+            >
+              <Trash2 size={16} />
+              Delete
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -108,10 +108,60 @@ export async function initializeDatabase() {
     )
   `);
 
+  // Create recurring_templates table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS recurring_templates (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL DEFAULT 'payment',
+      amount REAL NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'EUR',
+      frequency TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT,
+      occurrences_count INTEGER,
+      company_id TEXT,
+      payee TEXT NOT NULL,
+      reference TEXT,
+      category_id TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      last_generated_date TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Add currency column to transactions if not exists (migration)
   try {
     db.run('ALTER TABLE transactions ADD COLUMN currency TEXT NOT NULL DEFAULT \'EUR\'');
     console.log('Added currency column to transactions');
+  } catch (e) {
+    // Column already exists
+  }
+
+  // Add recurring-related columns to transactions (migration)
+  try {
+    db.run('ALTER TABLE transactions ADD COLUMN recurring_template_id TEXT');
+    console.log('Added recurring_template_id column to transactions');
+  } catch (e) {
+    // Column already exists
+  }
+
+  try {
+    db.run('ALTER TABLE transactions ADD COLUMN is_recurring INTEGER DEFAULT 0');
+    console.log('Added is_recurring column to transactions');
+  } catch (e) {
+    // Column already exists
+  }
+
+  try {
+    db.run('ALTER TABLE transactions ADD COLUMN is_exception INTEGER DEFAULT 0');
+    console.log('Added is_exception column to transactions');
+  } catch (e) {
+    // Column already exists
+  }
+
+  try {
+    db.run('ALTER TABLE transactions ADD COLUMN occurrence_date TEXT');
+    console.log('Added occurrence_date column to transactions');
   } catch (e) {
     // Column already exists
   }
@@ -258,7 +308,9 @@ export const transactionOps = {
   getAll: () => {
     const result = db.exec(`
       SELECT id, type, amount, currency, due_date as dueDate, company_id as companyId,
-             payee, reference, category_id as categoryId, status
+             payee, reference, category_id as categoryId, status,
+             recurring_template_id as recurringTemplateId, is_recurring as isRecurring,
+             is_exception as isException, occurrence_date as occurrenceDate
       FROM transactions
       ORDER BY due_date
     `);
@@ -267,8 +319,9 @@ export const transactionOps = {
 
   create: (transaction) => {
     db.run(`
-      INSERT INTO transactions (id, type, amount, currency, due_date, company_id, payee, reference, category_id, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO transactions (id, type, amount, currency, due_date, company_id, payee, reference, category_id, status,
+                                recurring_template_id, is_recurring, is_exception, occurrence_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       transaction.id,
       transaction.type || 'payment',
@@ -279,7 +332,11 @@ export const transactionOps = {
       transaction.payee,
       transaction.reference || null,
       transaction.categoryId || null,
-      transaction.status || 'to_pay'
+      transaction.status || 'to_pay',
+      transaction.recurringTemplateId || null,
+      transaction.isRecurring ? 1 : 0,
+      transaction.isException ? 1 : 0,
+      transaction.occurrenceDate || null
     ]);
     saveDatabase();
     return transaction;
@@ -289,7 +346,7 @@ export const transactionOps = {
     db.run(`
       UPDATE transactions
       SET type = ?, amount = ?, currency = ?, due_date = ?, company_id = ?, payee = ?,
-          reference = ?, category_id = ?, status = ?
+          reference = ?, category_id = ?, status = ?, is_exception = ?
       WHERE id = ?
     `, [
       transaction.type || 'payment',
@@ -301,6 +358,7 @@ export const transactionOps = {
       transaction.reference || null,
       transaction.categoryId || null,
       transaction.status || 'to_pay',
+      transaction.isException ? 1 : 0,
       transaction.id
     ]);
     saveDatabase();
@@ -309,6 +367,31 @@ export const transactionOps = {
 
   delete: (id) => {
     db.run('DELETE FROM transactions WHERE id = ?', [id]);
+    saveDatabase();
+    return { success: true };
+  },
+
+  getByTemplateId: (templateId) => {
+    const result = db.exec(`
+      SELECT id, type, amount, currency, due_date as dueDate, company_id as companyId,
+             payee, reference, category_id as categoryId, status,
+             recurring_template_id as recurringTemplateId, is_recurring as isRecurring,
+             is_exception as isException, occurrence_date as occurrenceDate
+      FROM transactions
+      WHERE recurring_template_id = ?
+      ORDER BY due_date
+    `, [templateId]);
+    return resultToObjects(result);
+  },
+
+  deleteUnpaidByTemplateId: (templateId) => {
+    db.run(`DELETE FROM transactions WHERE recurring_template_id = ? AND status != 'paid'`, [templateId]);
+    saveDatabase();
+    return { success: true };
+  },
+
+  deleteFutureByTemplateId: (templateId, fromDate) => {
+    db.run(`DELETE FROM transactions WHERE recurring_template_id = ? AND status != 'paid' AND due_date >= ?`, [templateId, fromDate]);
     saveDatabase();
     return { success: true };
   },
@@ -397,6 +480,105 @@ export const settingsOps = {
       settingsOps.set(key, value);
     }
     return settings;
+  },
+};
+
+// Recurring template operations
+export const recurringTemplateOps = {
+  getAll: () => {
+    const result = db.exec(`
+      SELECT id, type, amount, currency, frequency, start_date as startDate, end_date as endDate,
+             occurrences_count as occurrencesCount, company_id as companyId, payee, reference,
+             category_id as categoryId, status, last_generated_date as lastGeneratedDate, created_at as createdAt
+      FROM recurring_templates
+      ORDER BY created_at DESC
+    `);
+    return resultToObjects(result);
+  },
+
+  getById: (id) => {
+    const result = db.exec(`
+      SELECT id, type, amount, currency, frequency, start_date as startDate, end_date as endDate,
+             occurrences_count as occurrencesCount, company_id as companyId, payee, reference,
+             category_id as categoryId, status, last_generated_date as lastGeneratedDate, created_at as createdAt
+      FROM recurring_templates
+      WHERE id = ?
+    `, [id]);
+    const rows = resultToObjects(result);
+    return rows.length > 0 ? rows[0] : null;
+  },
+
+  create: (template) => {
+    db.run(`
+      INSERT INTO recurring_templates (id, type, amount, currency, frequency, start_date, end_date,
+                                       occurrences_count, company_id, payee, reference, category_id, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      template.id,
+      template.type || 'payment',
+      template.amount,
+      template.currency || 'EUR',
+      template.frequency,
+      template.startDate,
+      template.endDate || null,
+      template.occurrencesCount || null,
+      template.companyId || null,
+      template.payee,
+      template.reference || null,
+      template.categoryId || null,
+      template.status || 'active'
+    ]);
+    saveDatabase();
+    return template;
+  },
+
+  update: (id, data) => {
+    db.run(`
+      UPDATE recurring_templates
+      SET type = ?, amount = ?, currency = ?, frequency = ?, start_date = ?, end_date = ?,
+          occurrences_count = ?, company_id = ?, payee = ?, reference = ?, category_id = ?, status = ?
+      WHERE id = ?
+    `, [
+      data.type || 'payment',
+      data.amount,
+      data.currency || 'EUR',
+      data.frequency,
+      data.startDate,
+      data.endDate || null,
+      data.occurrencesCount || null,
+      data.companyId || null,
+      data.payee,
+      data.reference || null,
+      data.categoryId || null,
+      data.status || 'active',
+      id
+    ]);
+    saveDatabase();
+    return { id, ...data };
+  },
+
+  updateLastGenerated: (id, date) => {
+    db.run(`UPDATE recurring_templates SET last_generated_date = ? WHERE id = ?`, [date, id]);
+    saveDatabase();
+    return { success: true };
+  },
+
+  delete: (id) => {
+    db.run('DELETE FROM recurring_templates WHERE id = ?', [id]);
+    saveDatabase();
+    return { success: true };
+  },
+
+  pause: (id) => {
+    db.run(`UPDATE recurring_templates SET status = 'paused' WHERE id = ?`, [id]);
+    saveDatabase();
+    return { success: true };
+  },
+
+  resume: (id) => {
+    db.run(`UPDATE recurring_templates SET status = 'active' WHERE id = ?`, [id]);
+    saveDatabase();
+    return { success: true };
   },
 };
 

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { ArrowUpDown, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
+import { ArrowUpDown, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   formatCurrency,
   formatDate,
@@ -8,12 +8,14 @@ import {
   getStatusLabel,
   getWeekNumber,
   convertToBaseCurrency,
+  getFrequencyLabel,
 } from '../utils/helpers';
 
 export default function TableView({
   transactions,
   companies,
   categories,
+  templates = [],
   exchangeRates = [],
   baseCurrency = 'EUR',
   onEdit,
@@ -21,8 +23,10 @@ export default function TableView({
 }) {
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [filterRecurring, setFilterRecurring] = useState('all');
   const [sortField, setSortField] = useState('dueDate');
   const [sortDirection, setSortDirection] = useState('asc');
+  const [expandedSeries, setExpandedSeries] = useState(new Set());
 
   const filteredTransactions = useMemo(() => {
     let filtered = transactions;
@@ -33,6 +37,12 @@ export default function TableView({
 
     if (filterType !== 'all') {
       filtered = filtered.filter((p) => (p.type || 'payment') === filterType);
+    }
+
+    if (filterRecurring === 'recurring') {
+      filtered = filtered.filter((p) => p.isRecurring);
+    } else if (filterRecurring === 'one-time') {
+      filtered = filtered.filter((p) => !p.isRecurring);
     }
 
     return [...filtered].sort((a, b) => {
@@ -76,6 +86,10 @@ export default function TableView({
           aVal = getDaysUntilDue(a.dueDate);
           bVal = getDaysUntilDue(b.dueDate);
           break;
+        case 'recurring':
+          aVal = a.isRecurring ? 1 : 0;
+          bVal = b.isRecurring ? 1 : 0;
+          break;
         default:
           return 0;
       }
@@ -83,17 +97,16 @@ export default function TableView({
       if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [transactions, companies, categories, selectedCompanyId, filterType, sortField, sortDirection]);
+  }, [transactions, companies, categories, selectedCompanyId, filterType, filterRecurring, sortField, sortDirection]);
 
   const summary = useMemo(() => {
     const unpaidPayments = filteredTransactions.filter(
-      (p) => (p.type || 'payment') === 'payment' && p.status !== 'paid'
+      (p) => (p.type || 'payment') === 'payment' && p.status !== 'paid' && p.status !== 'skipped'
     );
     const unpaidEarnings = filteredTransactions.filter(
-      (p) => p.type === 'earning' && p.status !== 'paid'
+      (p) => p.type === 'earning' && p.status !== 'paid' && p.status !== 'skipped'
     );
 
-    // Convert all amounts to base currency for accurate totals
     const totalPayments = unpaidPayments.reduce((sum, p) => {
       const converted = convertToBaseCurrency(p.amount, p.currency || 'EUR', baseCurrency, exchangeRates);
       return sum + (converted !== null ? converted : p.amount);
@@ -142,6 +155,9 @@ export default function TableView({
   };
 
   const getStatusColorForType = (status, type) => {
+    if (status === 'skipped') {
+      return 'bg-gray-200 text-gray-600';
+    }
     if (type === 'earning') {
       switch (status) {
         case 'to_pay':
@@ -158,6 +174,9 @@ export default function TableView({
   };
 
   const getStatusLabelForType = (status, type) => {
+    if (status === 'skipped') {
+      return 'Skipped';
+    }
     if (type === 'earning') {
       switch (status) {
         case 'to_pay':
@@ -171,6 +190,29 @@ export default function TableView({
     return getStatusLabel(status);
   };
 
+  const getRecurringLabel = (transaction) => {
+    if (!transaction.isRecurring || !transaction.recurringTemplateId) return null;
+    const template = templates.find(t => t.id === transaction.recurringTemplateId);
+    if (!template) return 'Recurring';
+    return getFrequencyLabel(template.frequency);
+  };
+
+  const toggleSeriesExpand = (templateId) => {
+    const newExpanded = new Set(expandedSeries);
+    if (newExpanded.has(templateId)) {
+      newExpanded.delete(templateId);
+    } else {
+      newExpanded.add(templateId);
+    }
+    setExpandedSeries(newExpanded);
+  };
+
+  const getSeriesTransactions = (templateId) => {
+    return transactions
+      .filter(t => t.recurringTemplateId === templateId)
+      .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+  };
+
   return (
     <div className="bg-white rounded-lg shadow">
       <div className="p-4 border-b">
@@ -179,6 +221,15 @@ export default function TableView({
             Transaction Table
           </h2>
           <div className="flex items-center gap-2">
+            <select
+              value={filterRecurring}
+              onChange={(e) => setFilterRecurring(e.target.value)}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Entries</option>
+              <option value="recurring">Recurring Only</option>
+              <option value="one-time">One-time Only</option>
+            </select>
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
@@ -237,7 +288,7 @@ export default function TableView({
 
       {filteredTransactions.length === 0 ? (
         <div className="p-8 text-center text-gray-500">
-          {selectedCompanyId || filterType !== 'all'
+          {selectedCompanyId || filterType !== 'all' || filterRecurring !== 'all'
             ? 'No transactions found matching filters.'
             : 'No transactions added yet.'}
         </div>
@@ -247,6 +298,7 @@ export default function TableView({
             <thead className="bg-gray-50 border-b">
               <tr>
                 <SortHeader field="type">Type</SortHeader>
+                <SortHeader field="recurring">Recurrence</SortHeader>
                 <SortHeader field="weekNumber">Week</SortHeader>
                 <SortHeader field="dueDate">Due Date</SortHeader>
                 <SortHeader field="payee">Payee/Payer</SortHeader>
@@ -272,9 +324,18 @@ export default function TableView({
                 );
                 const type = transaction.type || 'payment';
                 const isEarning = type === 'earning';
+                const recurringLabel = getRecurringLabel(transaction);
+                const isExpanded = transaction.recurringTemplateId && expandedSeries.has(transaction.recurringTemplateId);
 
                 return (
-                  <tr key={transaction.id} className="hover:bg-gray-50">
+                  <tr
+                    key={transaction.id}
+                    className={`hover:bg-gray-50 ${
+                      transaction.isRecurring
+                        ? 'bg-slate-50 border-l-2 border-l-blue-400'
+                        : ''
+                    } ${transaction.isException ? 'bg-amber-50' : ''}`}
+                  >
                     <td className="px-3 py-3">
                       <div className={`flex items-center gap-1 ${getTypeColor(type)}`}>
                         {isEarning ? (
@@ -286,6 +347,32 @@ export default function TableView({
                           {isEarning ? 'IN' : 'OUT'}
                         </span>
                       </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      {recurringLabel ? (
+                        <div className="flex items-center gap-1">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                            <RefreshCw size={10} />
+                            {recurringLabel}
+                          </span>
+                          {transaction.recurringTemplateId && (
+                            <button
+                              onClick={() => toggleSeriesExpand(transaction.recurringTemplateId)}
+                              className="p-0.5 text-gray-400 hover:text-gray-600"
+                              title="Show series"
+                            >
+                              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </button>
+                          )}
+                          {transaction.isException && (
+                            <span className="px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-700">
+                              Modified
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">One-time</span>
+                      )}
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-900 text-center">
                       <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-medium">

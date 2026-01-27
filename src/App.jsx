@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useCompanies, useCategories, useTransactions, useExchangeRates, useSettings, useCurrencies } from './hooks/useDatabase';
+import { useCompanies, useCategories, useTransactions, useExchangeRates, useSettings, useCurrencies, useRecurringTemplates } from './hooks/useDatabase';
 import { authApi } from './api';
 import Navigation from './components/Navigation';
 import CompanyManager from './components/CompanyManager';
@@ -10,12 +10,14 @@ import TableView from './components/TableView';
 import MonthlyForecast from './components/MonthlyForecast';
 import PaymentModal from './components/PaymentModal';
 import CurrencySettings from './components/CurrencySettings';
+import RecurringManager from './components/RecurringManager';
 import Login from './components/Login';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('calendar');
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [editingPayment, setEditingPayment] = useState(null);
+  const [editingTemplate, setEditingTemplate] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
 
@@ -65,6 +67,7 @@ export default function App() {
     addTransaction,
     updateTransaction,
     deleteTransaction,
+    refetch: refetchTransactions,
   } = useTransactions(isAuthenticated);
 
   const {
@@ -90,16 +93,50 @@ export default function App() {
     setDefaultCurrency,
   } = useCurrencies(isAuthenticated);
 
+  const {
+    templates,
+    loading: templatesLoading,
+    addTemplate,
+    updateTemplate,
+    deleteTemplate,
+    pauseTemplate,
+    resumeTemplate,
+    skipOccurrence,
+    refetch: refetchTemplates,
+  } = useRecurringTemplates(isAuthenticated);
+
   const baseCurrency = settings.baseCurrency || 'EUR';
 
-  const handleAddOrUpdatePayment = async (payment) => {
+  const handleAddOrUpdatePayment = async (payment, editMode) => {
     const exists = transactions.find((p) => p.id === payment.id);
-    if (exists) {
+
+    if (editMode === 'series' && payment.recurringTemplateId) {
+      // Update the template and regenerate
+      const template = templates.find(t => t.id === payment.recurringTemplateId);
+      if (template) {
+        await updateTemplate(payment.recurringTemplateId, {
+          ...template,
+          amount: payment.amount,
+          currency: payment.currency,
+          payee: payment.payee,
+          reference: payment.reference,
+          companyId: payment.companyId,
+          categoryId: payment.categoryId,
+        }, true);
+        await refetchTransactions();
+      }
+    } else if (exists) {
       await updateTransaction(payment.id, payment);
     } else {
       await addTransaction(payment);
     }
     setEditingPayment(null);
+  };
+
+  const handleAddRecurringTemplate = async (template) => {
+    await addTemplate(template);
+    await refetchTransactions();
+    setActiveTab('recurring');
   };
 
   const handleDeletePayment = async (paymentId) => {
@@ -117,12 +154,40 @@ export default function App() {
     setSelectedPayment(payment);
   };
 
+  const handleEditTemplate = (template) => {
+    setEditingTemplate(template);
+    setActiveTab('payments');
+  };
+
+  const handleDeleteTemplate = async (templateId) => {
+    await deleteTemplate(templateId);
+    await refetchTransactions();
+  };
+
+  const handlePauseTemplate = async (templateId) => {
+    await pauseTemplate(templateId);
+  };
+
+  const handleResumeTemplate = async (templateId) => {
+    await resumeTemplate(templateId);
+    await refetchTransactions();
+  };
+
+  const handleSkipOccurrence = async (templateId, transactionId) => {
+    await skipOccurrence(templateId, transactionId);
+    await refetchTransactions();
+  };
+
   const selectedCompany = selectedPayment
     ? companies.find((c) => c.id === selectedPayment.companyId)
     : null;
 
   const selectedCategory = selectedPayment
     ? categories.find((c) => c.id === selectedPayment.categoryId)
+    : null;
+
+  const selectedTemplate = selectedPayment?.recurringTemplateId
+    ? templates.find((t) => t.id === selectedPayment.recurringTemplateId)
     : null;
 
   // Show loading while checking auth
@@ -142,7 +207,7 @@ export default function App() {
     return <Login onLogin={handleLogin} />;
   }
 
-  const isLoading = companiesLoading || categoriesLoading || transactionsLoading || ratesLoading || settingsLoading || currenciesLoading;
+  const isLoading = companiesLoading || categoriesLoading || transactionsLoading || ratesLoading || settingsLoading || currenciesLoading || templatesLoading;
 
   if (isLoading) {
     return (
@@ -174,6 +239,7 @@ export default function App() {
             transactions={transactions}
             companies={companies}
             categories={categories}
+            templates={templates}
             exchangeRates={exchangeRates}
             baseCurrency={baseCurrency}
             onEdit={handleEditPayment}
@@ -195,9 +261,31 @@ export default function App() {
             companies={companies}
             categories={categories}
             currencies={currencies}
+            templates={templates}
             onSubmit={handleAddOrUpdatePayment}
+            onSubmitRecurring={handleAddRecurringTemplate}
             editingPayment={editingPayment}
-            onCancelEdit={() => setEditingPayment(null)}
+            onCancelEdit={() => {
+              setEditingPayment(null);
+              setEditingTemplate(null);
+            }}
+          />
+        )}
+
+        {activeTab === 'recurring' && (
+          <RecurringManager
+            templates={templates}
+            transactions={transactions}
+            companies={companies}
+            categories={categories}
+            baseCurrency={baseCurrency}
+            exchangeRates={exchangeRates}
+            onPause={handlePauseTemplate}
+            onResume={handleResumeTemplate}
+            onDelete={handleDeleteTemplate}
+            onEdit={handleEditTemplate}
+            onAddNew={() => setActiveTab('payments')}
+            onSkipOccurrence={handleSkipOccurrence}
           />
         )}
 
@@ -240,9 +328,11 @@ export default function App() {
           payment={selectedPayment}
           company={selectedCompany}
           category={selectedCategory}
+          template={selectedTemplate}
           onClose={() => setSelectedPayment(null)}
           onEdit={handleEditPayment}
           onDelete={handleDeletePayment}
+          onSkip={handleSkipOccurrence}
           exchangeRates={exchangeRates}
           baseCurrency={baseCurrency}
         />
