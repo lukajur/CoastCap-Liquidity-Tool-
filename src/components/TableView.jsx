@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ArrowUpDown, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   formatCurrency,
@@ -7,9 +7,16 @@ import {
   getStatusColor,
   getStatusLabel,
   getWeekNumber,
+  getISOWeekNumber,
+  getISOWeekYear,
   convertToBaseCurrency,
   getFrequencyLabel,
+  getCurrentWeekInfo,
+  isDateInWeekRange,
+  getWeekDateRange,
 } from '../utils/helpers';
+import { useLocalStorage } from '../hooks/useLocalStorage';
+import WeekSelector from './WeekSelector';
 
 export default function TableView({
   transactions,
@@ -28,8 +35,71 @@ export default function TableView({
   const [sortDirection, setSortDirection] = useState('asc');
   const [expandedSeries, setExpandedSeries] = useState(new Set());
 
+  // Week navigation state with localStorage persistence
+  const currentWeekInfo = useMemo(() => getCurrentWeekInfo(), []);
+  const [weekSettings, setWeekSettings] = useLocalStorage('tableViewWeekSettings', {
+    fromWeek: currentWeekInfo.weekNumber,
+    toWeek: currentWeekInfo.weekNumber,
+    year: currentWeekInfo.year,
+    viewMode: '1',
+    lastVisit: Date.now(),
+  });
+
+  // Reset to current week if more than 2 weeks have passed since last visit
+  useEffect(() => {
+    const twoWeeksMs = 14 * 24 * 60 * 60 * 1000;
+    if (Date.now() - weekSettings.lastVisit > twoWeeksMs) {
+      setWeekSettings({
+        fromWeek: currentWeekInfo.weekNumber,
+        toWeek: currentWeekInfo.weekNumber,
+        year: currentWeekInfo.year,
+        viewMode: '1',
+        lastVisit: Date.now(),
+      });
+    } else if (weekSettings.lastVisit !== Date.now()) {
+      setWeekSettings(prev => ({ ...prev, lastVisit: Date.now() }));
+    }
+  }, []);
+
+  const handleWeekChange = (fromWeek, toWeek, year) => {
+    setWeekSettings(prev => ({
+      ...prev,
+      fromWeek,
+      toWeek,
+      year,
+      lastVisit: Date.now(),
+    }));
+  };
+
+  const handleViewModeChange = (viewMode) => {
+    setWeekSettings(prev => ({ ...prev, viewMode, lastVisit: Date.now() }));
+  };
+
+  // Check if a date is in the selected week range (handles cross-year if same year selected)
+  const isInSelectedWeekRange = (dateString) => {
+    const dateWeek = getISOWeekNumber(dateString);
+    const dateYear = getISOWeekYear(dateString);
+
+    // Simple same-year check
+    if (dateYear === weekSettings.year) {
+      return dateWeek >= weekSettings.fromWeek && dateWeek <= weekSettings.toWeek;
+    }
+
+    // For cross-year dates, use date-based comparison
+    const { start: rangeStart } = getWeekDateRange(weekSettings.fromWeek, weekSettings.year);
+    const { end: rangeEnd } = getWeekDateRange(weekSettings.toWeek, weekSettings.year);
+    const date = new Date(dateString);
+    date.setHours(0, 0, 0, 0);
+    rangeStart.setHours(0, 0, 0, 0);
+    rangeEnd.setHours(23, 59, 59, 999);
+    return date >= rangeStart && date <= rangeEnd;
+  };
+
   const filteredTransactions = useMemo(() => {
     let filtered = transactions;
+
+    // Week filter - filter by selected week range
+    filtered = filtered.filter((p) => isInSelectedWeekRange(p.dueDate));
 
     if (selectedCompanyId) {
       filtered = filtered.filter((p) => p.companyId === selectedCompanyId);
@@ -97,7 +167,7 @@ export default function TableView({
       if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [transactions, companies, categories, selectedCompanyId, filterType, filterRecurring, sortField, sortDirection]);
+  }, [transactions, companies, categories, selectedCompanyId, filterType, filterRecurring, sortField, sortDirection, weekSettings]);
 
   const summary = useMemo(() => {
     const unpaidPayments = filteredTransactions.filter(
@@ -123,8 +193,29 @@ export default function TableView({
       return sum + (converted !== null ? converted : p.amount);
     }, 0);
 
-    return { totalPayments, totalEarnings, overdueAmount, overdueCount: overdue.length };
+    // Week summary: total payments in selected period
+    const weekPaymentsCount = unpaidPayments.length;
+    const weekEarningsCount = unpaidEarnings.length;
+    const weekTotal = totalPayments + totalEarnings;
+
+    return {
+      totalPayments,
+      totalEarnings,
+      overdueAmount,
+      overdueCount: overdue.length,
+      weekPaymentsCount,
+      weekEarningsCount,
+      weekTotal,
+      totalCount: filteredTransactions.length,
+    };
   }, [filteredTransactions, exchangeRates, baseCurrency]);
+
+  // Check if a transaction's week is the current week
+  const isCurrentWeekTransaction = (dueDate) => {
+    const txWeek = getISOWeekNumber(dueDate);
+    const txYear = getISOWeekYear(dueDate);
+    return txWeek === currentWeekInfo.weekNumber && txYear === currentWeekInfo.year;
+  };
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -215,12 +306,29 @@ export default function TableView({
 
   return (
     <div className="bg-white rounded-lg shadow">
+      {/* Week Navigation */}
+      <div className="p-4 border-b">
+        <WeekSelector
+          fromWeek={weekSettings.fromWeek}
+          toWeek={weekSettings.toWeek}
+          year={weekSettings.year}
+          onWeekChange={handleWeekChange}
+          weekViewMode={weekSettings.viewMode}
+          onViewModeChange={handleViewModeChange}
+        />
+      </div>
+
       <div className="p-4 border-b">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Transaction Table
-          </h2>
-          <div className="flex items-center gap-2">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">
+              Transaction Table
+            </h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Showing {summary.totalCount} transaction{summary.totalCount !== 1 ? 's' : ''} totaling {formatCurrency(summary.weekTotal, baseCurrency)} {baseCurrency}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
             <select
               value={filterRecurring}
               onChange={(e) => setFilterRecurring(e.target.value)}
@@ -254,18 +362,20 @@ export default function TableView({
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-4 mt-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
           <div className="bg-blue-50 rounded-lg p-3">
             <p className="text-sm text-blue-600">Expected Earnings ({baseCurrency})</p>
             <p className="text-xl font-bold text-blue-900">
               {formatCurrency(summary.totalEarnings, baseCurrency)}
             </p>
+            <p className="text-xs text-blue-500">{summary.weekEarningsCount} item{summary.weekEarningsCount !== 1 ? 's' : ''}</p>
           </div>
           <div className="bg-red-50 rounded-lg p-3">
             <p className="text-sm text-red-600">Upcoming Payments ({baseCurrency})</p>
             <p className="text-xl font-bold text-red-900">
               {formatCurrency(summary.totalPayments, baseCurrency)}
             </p>
+            <p className="text-xs text-red-500">{summary.weekPaymentsCount} item{summary.weekPaymentsCount !== 1 ? 's' : ''}</p>
           </div>
           <div className="bg-green-50 rounded-lg p-3">
             <p className="text-sm text-green-600">Net Position ({baseCurrency})</p>
@@ -288,9 +398,16 @@ export default function TableView({
 
       {filteredTransactions.length === 0 ? (
         <div className="p-8 text-center text-gray-500">
-          {selectedCompanyId || filterType !== 'all' || filterRecurring !== 'all'
-            ? 'No transactions found matching filters.'
-            : 'No transactions added yet.'}
+          <p>
+            {selectedCompanyId || filterType !== 'all' || filterRecurring !== 'all'
+              ? 'No transactions found matching filters for selected week(s).'
+              : weekSettings.fromWeek === weekSettings.toWeek
+                ? `No transactions due in Week ${weekSettings.fromWeek}.`
+                : `No transactions due in Week ${weekSettings.fromWeek}-${weekSettings.toWeek}.`}
+          </p>
+          <p className="text-sm mt-2">
+            Try adjusting the week range or other filters above.
+          </p>
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -375,8 +492,12 @@ export default function TableView({
                       )}
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-900 text-center">
-                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-medium">
-                        {weekNumber}
+                      <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 h-8 rounded-full font-medium ${
+                        isCurrentWeekTransaction(transaction.dueDate)
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        W{weekNumber}
                       </span>
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-900 whitespace-nowrap">
