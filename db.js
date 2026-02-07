@@ -129,6 +129,41 @@ export async function initializeDatabase() {
     )
   `);
 
+  // Create bank_accounts table for tracking company bank balances
+  db.run(`
+    CREATE TABLE IF NOT EXISTS bank_accounts (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      account_name TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'EUR',
+      current_balance REAL NOT NULL DEFAULT 0,
+      account_number TEXT,
+      iban TEXT,
+      bank_name TEXT,
+      low_balance_threshold REAL DEFAULT 5000,
+      status TEXT NOT NULL DEFAULT 'active',
+      last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (company_id) REFERENCES companies(id)
+    )
+  `);
+
+  // Create balance_history table for tracking balance changes over time
+  db.run(`
+    CREATE TABLE IF NOT EXISTS balance_history (
+      id TEXT PRIMARY KEY,
+      bank_account_id TEXT NOT NULL,
+      previous_balance REAL NOT NULL,
+      new_balance REAL NOT NULL,
+      change_amount REAL NOT NULL,
+      change_type TEXT NOT NULL,
+      transaction_id TEXT,
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (bank_account_id) REFERENCES bank_accounts(id)
+    )
+  `);
+
   // Add currency column to transactions if not exists (migration)
   try {
     db.run('ALTER TABLE transactions ADD COLUMN currency TEXT NOT NULL DEFAULT \'EUR\'');
@@ -622,6 +657,183 @@ export const currencyOps = {
     settingsOps.set('baseCurrency', code);
     saveDatabase();
     return { success: true };
+  },
+};
+
+// Bank account operations
+export const bankAccountOps = {
+  getAll: () => {
+    const result = db.exec(`
+      SELECT id, company_id as companyId, account_name as accountName, currency,
+             current_balance as currentBalance, account_number as accountNumber,
+             iban, bank_name as bankName, low_balance_threshold as lowBalanceThreshold,
+             status, last_updated as lastUpdated, created_at as createdAt
+      FROM bank_accounts
+      ORDER BY company_id, account_name
+    `);
+    return resultToObjects(result);
+  },
+
+  getByCompanyId: (companyId) => {
+    const result = db.exec(`
+      SELECT id, company_id as companyId, account_name as accountName, currency,
+             current_balance as currentBalance, account_number as accountNumber,
+             iban, bank_name as bankName, low_balance_threshold as lowBalanceThreshold,
+             status, last_updated as lastUpdated, created_at as createdAt
+      FROM bank_accounts
+      WHERE company_id = ?
+      ORDER BY account_name
+    `, [companyId]);
+    return resultToObjects(result);
+  },
+
+  getById: (id) => {
+    const result = db.exec(`
+      SELECT id, company_id as companyId, account_name as accountName, currency,
+             current_balance as currentBalance, account_number as accountNumber,
+             iban, bank_name as bankName, low_balance_threshold as lowBalanceThreshold,
+             status, last_updated as lastUpdated, created_at as createdAt
+      FROM bank_accounts
+      WHERE id = ?
+    `, [id]);
+    const rows = resultToObjects(result);
+    return rows.length > 0 ? rows[0] : null;
+  },
+
+  create: (account) => {
+    db.run(`
+      INSERT INTO bank_accounts (id, company_id, account_name, currency, current_balance,
+                                 account_number, iban, bank_name, low_balance_threshold, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      account.id,
+      account.companyId,
+      account.accountName,
+      account.currency || 'EUR',
+      account.currentBalance || 0,
+      account.accountNumber || null,
+      account.iban || null,
+      account.bankName || null,
+      account.lowBalanceThreshold || 5000,
+      account.status || 'active'
+    ]);
+    saveDatabase();
+    return account;
+  },
+
+  update: (id, data) => {
+    db.run(`
+      UPDATE bank_accounts
+      SET account_name = ?, currency = ?, current_balance = ?, account_number = ?,
+          iban = ?, bank_name = ?, low_balance_threshold = ?, status = ?,
+          last_updated = datetime('now')
+      WHERE id = ?
+    `, [
+      data.accountName,
+      data.currency || 'EUR',
+      data.currentBalance || 0,
+      data.accountNumber || null,
+      data.iban || null,
+      data.bankName || null,
+      data.lowBalanceThreshold || 5000,
+      data.status || 'active',
+      id
+    ]);
+    saveDatabase();
+    return { id, ...data };
+  },
+
+  updateBalance: (id, newBalance, changeType = 'manual', transactionId = null, notes = null) => {
+    const account = bankAccountOps.getById(id);
+    if (!account) return null;
+
+    const previousBalance = account.currentBalance;
+    const changeAmount = newBalance - previousBalance;
+
+    // Update the balance
+    db.run(`
+      UPDATE bank_accounts
+      SET current_balance = ?, last_updated = datetime('now')
+      WHERE id = ?
+    `, [newBalance, id]);
+
+    // Record the change in history
+    const historyId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+    db.run(`
+      INSERT INTO balance_history (id, bank_account_id, previous_balance, new_balance, change_amount, change_type, transaction_id, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [historyId, id, previousBalance, newBalance, changeAmount, changeType, transactionId, notes]);
+
+    saveDatabase();
+    return { id, currentBalance: newBalance, previousBalance, changeAmount };
+  },
+
+  delete: (id) => {
+    // Also delete balance history for this account
+    db.run('DELETE FROM balance_history WHERE bank_account_id = ?', [id]);
+    db.run('DELETE FROM bank_accounts WHERE id = ?', [id]);
+    saveDatabase();
+    return { success: true };
+  },
+
+  deleteByCompanyId: (companyId) => {
+    const accounts = bankAccountOps.getByCompanyId(companyId);
+    for (const account of accounts) {
+      db.run('DELETE FROM balance_history WHERE bank_account_id = ?', [account.id]);
+    }
+    db.run('DELETE FROM bank_accounts WHERE company_id = ?', [companyId]);
+    saveDatabase();
+    return { success: true };
+  },
+
+  getTotalBalanceByCompany: (companyId) => {
+    const result = db.exec(`
+      SELECT currency, SUM(current_balance) as total
+      FROM bank_accounts
+      WHERE company_id = ? AND status = 'active'
+      GROUP BY currency
+    `, [companyId]);
+    return resultToObjects(result);
+  },
+
+  getTotalBalance: () => {
+    const result = db.exec(`
+      SELECT currency, SUM(current_balance) as total
+      FROM bank_accounts
+      WHERE status = 'active'
+      GROUP BY currency
+    `);
+    return resultToObjects(result);
+  },
+};
+
+// Balance history operations
+export const balanceHistoryOps = {
+  getByAccountId: (accountId, limit = 50) => {
+    const result = db.exec(`
+      SELECT id, bank_account_id as bankAccountId, previous_balance as previousBalance,
+             new_balance as newBalance, change_amount as changeAmount, change_type as changeType,
+             transaction_id as transactionId, notes, created_at as createdAt
+      FROM balance_history
+      WHERE bank_account_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `, [accountId, limit]);
+    return resultToObjects(result);
+  },
+
+  getRecent: (limit = 100) => {
+    const result = db.exec(`
+      SELECT bh.id, bh.bank_account_id as bankAccountId, bh.previous_balance as previousBalance,
+             bh.new_balance as newBalance, bh.change_amount as changeAmount, bh.change_type as changeType,
+             bh.transaction_id as transactionId, bh.notes, bh.created_at as createdAt,
+             ba.account_name as accountName, ba.company_id as companyId
+      FROM balance_history bh
+      JOIN bank_accounts ba ON bh.bank_account_id = ba.id
+      ORDER BY bh.created_at DESC
+      LIMIT ?
+    `, [limit]);
+    return resultToObjects(result);
   },
 };
 

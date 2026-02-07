@@ -4,7 +4,7 @@ import session from 'express-session';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { initializeDatabase, companyOps, categoryOps, transactionOps, exchangeRateOps, settingsOps, currencyOps, recurringTemplateOps } from './db.js';
+import { initializeDatabase, companyOps, categoryOps, transactionOps, exchangeRateOps, settingsOps, currencyOps, recurringTemplateOps, bankAccountOps, balanceHistoryOps } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -380,6 +380,123 @@ app.post('/api/currencies/:code/set-default', (req, res) => {
     const { code } = req.params;
     currencyOps.setDefault(code);
     res.json({ success: true, baseCurrency: code });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== Bank Account Routes =====
+app.get('/api/bank-accounts', (req, res) => {
+  try {
+    const accounts = bankAccountOps.getAll();
+    res.json(accounts);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/bank-accounts/company/:companyId', (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const accounts = bankAccountOps.getByCompanyId(companyId);
+    res.json(accounts);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/bank-accounts/totals', (req, res) => {
+  try {
+    const totals = bankAccountOps.getTotalBalance();
+    res.json(totals);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/bank-accounts/totals/:companyId', (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const totals = bankAccountOps.getTotalBalanceByCompany(companyId);
+    res.json(totals);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/bank-accounts/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const account = bankAccountOps.getById(id);
+    if (!account) {
+      return res.status(404).json({ error: 'Bank account not found' });
+    }
+    res.json(account);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/bank-accounts', (req, res) => {
+  try {
+    const account = bankAccountOps.create(req.body);
+    res.json(account);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/bank-accounts/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const account = bankAccountOps.update(id, req.body);
+    res.json(account);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/bank-accounts/:id/balance', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newBalance, changeType, transactionId, notes } = req.body;
+    const result = bankAccountOps.updateBalance(id, newBalance, changeType || 'manual', transactionId, notes);
+    if (!result) {
+      return res.status(404).json({ error: 'Bank account not found' });
+    }
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/bank-accounts/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    bankAccountOps.delete(id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== Balance History Routes =====
+app.get('/api/balance-history/:accountId', (req, res) => {
+  try {
+    const { accountId } = req.params;
+    const limit = parseInt(req.query.limit) || 50;
+    const history = balanceHistoryOps.getByAccountId(accountId, limit);
+    res.json(history);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/balance-history', (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const history = balanceHistoryOps.getRecent(limit);
+    res.json(history);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

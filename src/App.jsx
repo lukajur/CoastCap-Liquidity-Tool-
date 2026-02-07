@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useCompanies, useCategories, useTransactions, useExchangeRates, useSettings, useCurrencies, useRecurringTemplates } from './hooks/useDatabase';
+import { useCompanies, useCategories, useTransactions, useExchangeRates, useSettings, useCurrencies, useRecurringTemplates, useBankAccounts } from './hooks/useDatabase';
 import { authApi } from './api';
 import Navigation from './components/Navigation';
 import CompanyManager from './components/CompanyManager';
@@ -11,10 +11,12 @@ import MonthlyForecast from './components/MonthlyForecast';
 import PaymentModal from './components/PaymentModal';
 import CurrencySettings from './components/CurrencySettings';
 import RecurringManager from './components/RecurringManager';
+import BankAccountManager from './components/BankAccountManager';
+import LiquidityDashboard from './components/LiquidityDashboard';
 import Login from './components/Login';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('calendar');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [editingPayment, setEditingPayment] = useState(null);
   const [editingTemplate, setEditingTemplate] = useState(null);
@@ -104,6 +106,15 @@ export default function App() {
     skipOccurrence,
     refetch: refetchTemplates,
   } = useRecurringTemplates(isAuthenticated);
+
+  const {
+    bankAccounts,
+    loading: bankAccountsLoading,
+    addBankAccount,
+    updateBankAccount,
+    updateBankAccountBalance,
+    deleteBankAccount,
+  } = useBankAccounts(isAuthenticated);
 
   const baseCurrency = settings.baseCurrency || 'EUR';
 
@@ -207,7 +218,7 @@ export default function App() {
     return <Login onLogin={handleLogin} />;
   }
 
-  const isLoading = companiesLoading || categoriesLoading || transactionsLoading || ratesLoading || settingsLoading || currenciesLoading || templatesLoading;
+  const isLoading = companiesLoading || categoriesLoading || transactionsLoading || ratesLoading || settingsLoading || currenciesLoading || templatesLoading || bankAccountsLoading;
 
   if (isLoading) {
     return (
@@ -225,6 +236,16 @@ export default function App() {
       <Navigation activeTab={activeTab} onTabChange={setActiveTab} onLogout={handleLogout} />
 
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {activeTab === 'dashboard' && (
+          <LiquidityDashboard
+            bankAccounts={bankAccounts}
+            transactions={transactions}
+            companies={companies}
+            exchangeRates={exchangeRates}
+            baseCurrency={baseCurrency}
+          />
+        )}
+
         {activeTab === 'calendar' && (
           <CalendarView
             transactions={transactions}
@@ -286,6 +307,20 @@ export default function App() {
             onEdit={handleEditTemplate}
             onAddNew={() => setActiveTab('payments')}
             onSkipOccurrence={handleSkipOccurrence}
+          />
+        )}
+
+        {activeTab === 'bank-accounts' && (
+          <BankAccountManager
+            bankAccounts={bankAccounts}
+            companies={companies}
+            currencies={currencies}
+            exchangeRates={exchangeRates}
+            baseCurrency={baseCurrency}
+            onAdd={addBankAccount}
+            onUpdate={updateBankAccount}
+            onUpdateBalance={updateBankAccountBalance}
+            onDelete={deleteBankAccount}
           />
         )}
 

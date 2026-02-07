@@ -1,11 +1,13 @@
-import { Calendar, Table, Building2, PlusCircle, Settings, TrendingUp, LogOut, Coins, RefreshCw } from 'lucide-react';
+import { Calendar, Table, Building2, PlusCircle, Settings, TrendingUp, LogOut, Coins, RefreshCw, LayoutDashboard, Landmark } from 'lucide-react';
 
 const tabs = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'calendar', label: 'Calendar', icon: Calendar },
   { id: 'table', label: 'Table View', icon: Table },
   { id: 'forecast', label: 'Forecast', icon: TrendingUp },
   { id: 'payments', label: 'Add Entry', icon: PlusCircle },
   { id: 'recurring', label: 'Recurring', icon: RefreshCw },
+  { id: 'bank-accounts', label: 'Bank Accounts', icon: Landmark },
   { id: 'companies', label: 'Companies', icon: Building2 },
   { id: 'categories', label: 'Categories', icon: Settings },
   { id: 'currencies', label: 'Currencies', icon: Coins },

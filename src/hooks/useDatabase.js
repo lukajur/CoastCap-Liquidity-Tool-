@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { companyApi, categoryApi, transactionApi, exchangeRateApi, settingsApi, currencyApi, recurringTemplateApi } from '../api';
+import { companyApi, categoryApi, transactionApi, exchangeRateApi, settingsApi, currencyApi, recurringTemplateApi, bankAccountApi, balanceHistoryApi } from '../api';
 
 export function useCompanies(isAuthenticated = true) {
   const [companies, setCompanies] = useState([]);
@@ -424,5 +424,145 @@ export function useRecurringTemplates(isAuthenticated = true) {
     generateOccurrences,
     getTemplateTransactions,
     refetch: fetchTemplates,
+  };
+}
+
+export function useBankAccounts(isAuthenticated = true) {
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchBankAccounts = useCallback(async () => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const data = await bankAccountApi.getAll();
+      setBankAccounts(data);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    fetchBankAccounts();
+  }, [fetchBankAccounts]);
+
+  const addBankAccount = async (account) => {
+    const newAccount = await bankAccountApi.create(account);
+    setBankAccounts((prev) => [...prev, newAccount]);
+    return newAccount;
+  };
+
+  const updateBankAccount = async (id, data) => {
+    const updated = await bankAccountApi.update(id, data);
+    setBankAccounts((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)));
+    return updated;
+  };
+
+  const updateBankAccountBalance = async (id, newBalance, changeType = 'manual', transactionId = null, notes = null) => {
+    const result = await bankAccountApi.updateBalance(id, newBalance, changeType, transactionId, notes);
+    setBankAccounts((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, currentBalance: newBalance, lastUpdated: new Date().toISOString() } : a))
+    );
+    return result;
+  };
+
+  const deleteBankAccount = async (id) => {
+    await bankAccountApi.delete(id);
+    setBankAccounts((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const getAccountsByCompany = (companyId) => {
+    return bankAccounts.filter((a) => a.companyId === companyId);
+  };
+
+  const getTotalBalanceByCompany = (companyId, baseCurrency, exchangeRates) => {
+    const accounts = getAccountsByCompany(companyId);
+    return accounts.reduce((total, account) => {
+      if (account.status !== 'active') return total;
+      if (account.currency === baseCurrency) {
+        return total + account.currentBalance;
+      }
+      const rate = exchangeRates.find(
+        (r) => r.fromCurrency === account.currency && r.toCurrency === baseCurrency
+      );
+      if (rate) {
+        return total + account.currentBalance * rate.rate;
+      }
+      return total + account.currentBalance;
+    }, 0);
+  };
+
+  const getTotalBalance = (baseCurrency, exchangeRates) => {
+    return bankAccounts.reduce((total, account) => {
+      if (account.status !== 'active') return total;
+      if (account.currency === baseCurrency) {
+        return total + account.currentBalance;
+      }
+      const rate = exchangeRates.find(
+        (r) => r.fromCurrency === account.currency && r.toCurrency === baseCurrency
+      );
+      if (rate) {
+        return total + account.currentBalance * rate.rate;
+      }
+      return total + account.currentBalance;
+    }, 0);
+  };
+
+  return {
+    bankAccounts,
+    loading,
+    error,
+    addBankAccount,
+    updateBankAccount,
+    updateBankAccountBalance,
+    deleteBankAccount,
+    getAccountsByCompany,
+    getTotalBalanceByCompany,
+    getTotalBalance,
+    refetch: fetchBankAccounts,
+  };
+}
+
+export function useBalanceHistory(accountId = null, isAuthenticated = true) {
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchHistory = useCallback(async () => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+    try {
+      let data;
+      if (accountId) {
+        data = await balanceHistoryApi.getByAccountId(accountId);
+      } else {
+        data = await balanceHistoryApi.getRecent();
+      }
+      setHistory(data);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated, accountId]);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  return {
+    history,
+    loading,
+    error,
+    refetch: fetchHistory,
   };
 }

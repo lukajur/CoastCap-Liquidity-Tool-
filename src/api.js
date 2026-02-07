@@ -367,3 +367,96 @@ export const recurringTemplateApi = {
     return handleResponse(response);
   },
 };
+
+// Bank Account API
+export const bankAccountApi = {
+  getAll: async () => {
+    const response = await fetch(`${API_BASE}/bank-accounts`, {
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  getByCompanyId: async (companyId) => {
+    const response = await fetch(`${API_BASE}/bank-accounts/company/${companyId}`, {
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  getById: async (id) => {
+    const response = await fetch(`${API_BASE}/bank-accounts/${id}`, {
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  getTotals: async () => {
+    const response = await fetch(`${API_BASE}/bank-accounts/totals`, {
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  getTotalsByCompany: async (companyId) => {
+    const response = await fetch(`${API_BASE}/bank-accounts/totals/${companyId}`, {
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  create: async (account) => {
+    const response = await fetch(`${API_BASE}/bank-accounts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(account),
+    });
+    return handleResponse(response);
+  },
+
+  update: async (id, data) => {
+    const response = await fetch(`${API_BASE}/bank-accounts/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  updateBalance: async (id, newBalance, changeType = 'manual', transactionId = null, notes = null) => {
+    const response = await fetch(`${API_BASE}/bank-accounts/${id}/balance`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ newBalance, changeType, transactionId, notes }),
+    });
+    return handleResponse(response);
+  },
+
+  delete: async (id) => {
+    const response = await fetch(`${API_BASE}/bank-accounts/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+};
+
+// Balance History API
+export const balanceHistoryApi = {
+  getByAccountId: async (accountId, limit = 50) => {
+    const response = await fetch(`${API_BASE}/balance-history/${accountId}?limit=${limit}`, {
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+
+  getRecent: async (limit = 100) => {
+    const response = await fetch(`${API_BASE}/balance-history?limit=${limit}`, {
+      credentials: 'include',
+    });
+    return handleResponse(response);
+  },
+};
