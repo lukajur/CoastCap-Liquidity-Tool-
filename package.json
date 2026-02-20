@@ -4,18 +4,15 @@
   "version": "0.0.1",
   "type": "module",
   "engines": {
-    "node": "18.x",
-    "npm": ">=9.0.0"
+    "node": ">=18.0.0"
   },
   "scripts": {
     "dev": "concurrently \"node server.js\" \"vite\"",
     "server": "node server.js",
     "client": "vite",
-    "build": "vite build --mode production",
-    "build:ci": "NODE_ENV=production vite build --mode production",
+    "build": "vite build",
     "preview": "vite preview",
-    "start": "node server.js",
-    "postinstall": "echo 'Dependencies installed'"
+    "start": "node server.js"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.10",
